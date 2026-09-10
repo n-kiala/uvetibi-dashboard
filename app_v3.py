@@ -36,7 +36,7 @@ AUTORISER_SUPPRESSION = False
 
 st.set_page_config(
     layout="wide",
-    page_title="Constats d'erreurs de tri - UVE Tibi",
+    page_title="Suivi des indésirables — collecte FFOM - UVE Tibi",
     page_icon=cfg.LOGO_NEUROGREEN if os.path.exists(cfg.LOGO_NEUROGREEN) else None,
 )
 
@@ -176,7 +176,7 @@ with col_logo_ng:
         st.image(cfg.LOGO_NEUROGREEN, width=54)
 with col_titre:
     st.markdown(
-        '<div class="bandeau-titre">Constats d\'erreurs de tri</div>'
+        '<div class="bandeau-titre">Suivi des indésirables &mdash; collecte FFOM</div>'
         f'<div class="bandeau-site">{cfg.SITE} &middot; surveillance automatisee NeuroGreen</div>',
         unsafe_allow_html=True,
     )
@@ -561,7 +561,7 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
     tableau_legende.setStyle(TableStyle(styles_legende))
 
     contenu = [
-        Paragraph("Constats d'erreurs de tri par Neurogreen", style_titre),
+        Paragraph("Suivi des indésirables — collecte FFOM par Neurogreen", style_titre),
         Paragraph(
             f"<b>Site :</b> {cfg.SITE} | <b>Date :</b> {cfg.libelle_long(jour)} "
             f"| <b>Plaque :</b> {plaque}",
