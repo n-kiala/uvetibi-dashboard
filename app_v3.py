@@ -516,7 +516,7 @@ else:
 
 
 def construire_pdf(jour, plaque, noms_blobs) -> bytes:
-    """Assemble le rapport d'exploitabilite des images pour un vehicule."""
+    """Assemble le rapport des constats d'un vehicule pour une journee."""
     tampon = BytesIO()
     document = SimpleDocTemplate(
         tampon, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40
@@ -565,7 +565,7 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
     tableau_legende.setStyle(TableStyle(styles_legende))
 
     contenu = [
-        Paragraph("Rapport sur l'exploitabilite des images captees par NeuroGreen", style_titre),
+        Paragraph("Constats d'erreurs de tri par Neurogreen", style_titre),
         Paragraph(
             f"<b>Site :</b> {cfg.SITE} | <b>Date :</b> {cfg.libelle_long(jour)} "
             f"| <b>Plaque :</b> {plaque}",
