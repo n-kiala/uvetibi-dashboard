@@ -367,15 +367,6 @@ for ligne in resume_plaques.itertuples():
 
 plaque_active = st.session_state.plaque
 
-with st.expander("Detail des constats de ce vehicule"):
-    st.dataframe(
-        df_jour[df_jour["plaque"] == plaque_active][
-            ["horodatage", "type", "count", "score_confiance"]
-        ].sort_values("horodatage"),
-        use_container_width=True,
-        hide_index=True,
-    )
-
 # --------------------------------------------------------------------------
 # Galerie
 # --------------------------------------------------------------------------
@@ -398,10 +389,7 @@ if erreur_images is not None:
     st.warning("Les images n'ont pas pu etre listees dans Cloud Storage.")
     st.exception(erreur_images)
 elif not images:
-    st.info(
-        "Aucune image archivee pour ce vehicule ce jour-la. "
-        "Les constats restent consultables dans le tableau ci-dessus."
-    )
+    st.info("Aucune image archivee pour ce vehicule ce jour-la.")
 else:
     st.markdown(
         bloc_legende(
