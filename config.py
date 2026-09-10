@@ -124,9 +124,10 @@ def _credentials():
     de l'hebergeur font foi.
     """
     try:
+        rubriques = sorted(st.secrets.keys())
         secrets_gcp = st.secrets.get("gcp_service_account")
     except Exception:  # noqa: BLE001 - aucun secrets.toml : cas normal en local
-        secrets_gcp = None
+        rubriques, secrets_gcp = [], None
 
     if secrets_gcp:
         return service_account.Credentials.from_service_account_info(dict(secrets_gcp))
@@ -134,9 +135,13 @@ def _credentials():
     if os.path.exists(CREDENTIALS_PATH):
         return service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
 
+    # Le detail des rubriques presentes (leurs noms seuls, jamais les valeurs)
+    # distingue d'un coup d'oeil "aucun secret configure" de "secret present
+    # mais mal nomme", les deux erreurs de deploiement les plus frequentes.
     raise FileNotFoundError(
-        "Aucun identifiant GCP : ni secret `gcp_service_account`, "
-        f"ni fichier {CREDENTIALS_PATH}."
+        "Aucun identifiant GCP. Section [gcp_service_account] attendue dans les "
+        f"secrets ; rubriques trouvees : {rubriques or 'aucune'}. "
+        f"Aucun fichier local non plus : {CREDENTIALS_PATH}."
     )
 
 
