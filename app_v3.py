@@ -125,14 +125,14 @@ except Exception as exc:  # noqa: BLE001
     df, erreur_chargement = None, exc
 
 if erreur_chargement is not None:
-    st.error("La connexion a BigQuery a echoue. Le detail technique :")
+    st.error("La connexion à BigQuery a échoué. Le détail technique :")
     st.exception(erreur_chargement)
     st.stop()
 
 if df.empty:
     st.info(
         f"La table `{cfg.TABLE_REF}` ne contient aucun constat. "
-        "Verifiez que la remontee depuis le site alimente bien BigQuery."
+        "Vérifiez que la remontée depuis le site alimente bien BigQuery."
     )
     st.stop()
 
@@ -152,14 +152,14 @@ try:
     ]
 except Exception as exc:  # noqa: BLE001
     st.warning(
-        "Impossible de verifier les images disponibles ; les constats sans "
-        "image restent affiches."
+        "Impossible de vérifier les images disponibles ; les constats sans "
+        "image restent affichés."
     )
 
 if df.empty:
     st.info(
         "Aucun constat ne dispose encore d'image consultable. "
-        "Les constats dont les images ont ete supprimees ne sont plus affiches."
+        "Les constats dont les images ont été supprimées ne sont plus affichés."
     )
     st.stop()
 
@@ -177,12 +177,12 @@ with col_logo_ng:
 with col_titre:
     st.markdown(
         '<div class="bandeau-titre">Suivi des indésirables &mdash; collecte FFOM</div>'
-        f'<div class="bandeau-site">{cfg.SITE} &middot; surveillance automatisee NeuroGreen</div>',
+        f'<div class="bandeau-site">{cfg.SITE} &middot; surveillance automatisée NeuroGreen</div>',
         unsafe_allow_html=True,
     )
 with col_periode:
     st.markdown(
-        '<div class="bandeau-periode-label">Periode analysee</div>'
+        '<div class="bandeau-periode-label">Période analysée</div>'
         f'<div class="bandeau-periode">{cfg.libelle_long(debut)} &rarr; {cfg.libelle_long(fin)}</div>',
         unsafe_allow_html=True,
     )
@@ -297,9 +297,9 @@ df_jour = df[df["date"] == jour_actif]
 type_dominant = df_jour.groupby("type")["count"].sum().idxmax()
 indicateurs = [
     ("Constats du jour", str(len(df_jour)), True),
-    ("Vehicules concernes", str(df_jour["plaque"].nunique()), False),
+    ("Véhicules concernés", str(df_jour["plaque"].nunique()), False),
     ("Type dominant", str(type_dominant).replace("_", " "), False),
-    ("Total sur la periode", str(len(df)), False),
+    ("Total sur la période", str(len(df)), False),
 ]
 
 st.write("")
@@ -317,7 +317,7 @@ for colonne, (label, valeur, accent) in zip(st.columns(4), indicateurs):
 # --------------------------------------------------------------------------
 
 st.write("")
-st.markdown("##### Vehicules concernes ce jour")
+st.markdown("##### Véhicules concernés ce jour")
 
 type_dominant_par_plaque = (
     df_jour.groupby(["plaque", "type"])["count"]
@@ -388,10 +388,10 @@ st.markdown(
 )
 
 if erreur_images is not None:
-    st.warning("Les images n'ont pas pu etre listees dans Cloud Storage.")
+    st.warning("Les images n'ont pas pu être listées dans Cloud Storage.")
     st.exception(erreur_images)
 elif not images:
-    st.info("Aucune image archivee pour ce vehicule ce jour-la.")
+    st.info("Aucune image archivée pour ce véhicule ce jour-là.")
 else:
     st.markdown(
         bloc_legende(
@@ -428,23 +428,23 @@ else:
             ].sort_values("horodatage")
             st.divider()
             if constats_vehicule.empty:
-                st.info("Aucun constat associe a ce vehicule pour ce jour.")
+                st.info("Aucun constat associé à ce véhicule pour ce jour.")
             else:
                 st.caption(
-                    "Supprime definitivement ce fichier image du stockage ainsi que le constat "
-                    "choisi ci-dessous dans BigQuery. Un constat insere il y a moins de 30 minutes "
-                    "peut encore etre dans le tampon de streaming et refuser d'etre supprime."
+                    "Supprime définitivement ce fichier image du stockage ainsi que le constat "
+                    "choisi ci-dessous dans BigQuery. Un constat inséré il y a moins de 30 minutes "
+                    "peut encore être dans le tampon de streaming et refuser d'être supprimé."
                 )
                 options_suppression = {
                     f"{ligne.horodatage} · {ligne.type} · count {ligne.count}": ligne
                     for ligne in constats_vehicule.itertuples()
                 }
                 choix_suppression = st.selectbox(
-                    "Constat correspondant a cette image", list(options_suppression.keys()),
+                    "Constat correspondant à cette image", list(options_suppression.keys()),
                     key="choix_suppression",
                 )
                 confirme_suppression = st.checkbox(
-                    "Je confirme la suppression definitive de cette image et de ce constat",
+                    "Je confirme la suppression définitive de cette image et de ce constat",
                     key="confirme_suppression",
                 )
                 if st.button(
@@ -458,7 +458,7 @@ else:
                     try:
                         cfg.supprimer_image(nom_image)
                     except Exception as exc:  # noqa: BLE001
-                        st.error("La suppression du fichier image a echoue.")
+                        st.error("La suppression du fichier image a échoué.")
                         st.exception(exc)
                         st.stop()
 
@@ -482,7 +482,7 @@ else:
                         travail.result()
                     except Exception as exc:  # noqa: BLE001
                         st.warning(
-                            "L'image a ete supprimee, mais la suppression du constat BigQuery a echoue."
+                            "L'image a été supprimée, mais la suppression du constat BigQuery a échoué."
                         )
                         st.exception(exc)
                         st.stop()
@@ -596,13 +596,13 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
 
 if images:
     st.write("")
-    if st.button("Preparer le rapport PDF de ce vehicule", type="secondary"):
+    if st.button("Préparer le rapport PDF de ce véhicule", type="secondary"):
         with st.spinner("Assemblage du rapport..."):
             st.session_state.pdf = construire_pdf(jour_actif, plaque_active, images)
 
     if st.session_state.get("pdf"):
         st.download_button(
-            "Telecharger le rapport PDF",
+            "Télécharger le rapport PDF",
             data=st.session_state.pdf,
             file_name=f"Rapport_NeuroGreen_{plaque_active}_{jour_actif.isoformat()}.pdf",
             mime="application/pdf",
