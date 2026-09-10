@@ -203,7 +203,7 @@ st.markdown("##### Jour de collecte")
 
 repartition_jour = (
     df.groupby(["date", "type"])
-    .agg(constats=("type", "size"), objets=("count", "sum"))
+    .agg(constats=("type", "size"))
     .reset_index()
 )
 repartition_jour["jour"] = repartition_jour["date"].map(cfg.libelle_court)
@@ -242,11 +242,12 @@ graphique = (
         # a peine : les teintes CVAT etant pastel, les estomper davantage les
         # ramenerait au blanc. Le bouton actif porte deja le signal principal.
         opacity=alt.condition(alt.datum.actif, alt.value(1), alt.value(0.75)),
+        # Volontairement sans le nombre d'objets : cote client, deux compteurs
+        # voisins aux valeurs differentes pretaient a confusion.
         tooltip=[
             alt.Tooltip("jour:N", title="Jour"),
             alt.Tooltip("type:N", title="Type"),
             alt.Tooltip("constats:Q", title="Constats"),
-            alt.Tooltip("objets:Q", title="Objets"),
         ],
     )
     .properties(height=240)
