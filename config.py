@@ -71,6 +71,12 @@ COULEURS_TYPE = {
 }
 COULEUR_TYPE_DEFAUT = ("#E5E7EB", "#374151")
 
+# Types ecartes de la vue client : ils restent en base et visibles dans la page
+# Administration, mais ne sont ni comptes ni affiches cote client. Le filtre
+# s'applique au chargement, pour que compteurs, graphique et legendes portent
+# tous sur le meme jeu de constats.
+TYPES_MASQUES = {"Textile"}
+
 # Variantes de saisie (casse, orthographe) ramenees vers un type canonique
 # ci-dessus, pour que chaque erreur ne soit comptee et coloree qu'une fois.
 TYPES_CANONIQUES = {

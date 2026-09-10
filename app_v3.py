@@ -136,6 +136,8 @@ if df.empty:
     )
     st.stop()
 
+df = df[~df["type"].isin(cfg.TYPES_MASQUES)]
+
 # Un vehicule dont toutes les images ont ete supprimees n'a plus rien a montrer
 # au client : ses constats sortent du jeu de donnees des le chargement. Filtrer
 # ici plutot qu'a l'affichage garantit que tous les compteurs de la page (jour
@@ -397,6 +399,7 @@ else:
             [
                 (libelle.replace("_", " "), cfg.couleur_type(canonique)[0], glose)
                 for libelle, canonique, glose in cfg.LEGENDE_ANNOTATIONS
+                if canonique not in cfg.TYPES_MASQUES
             ],
         ),
         unsafe_allow_html=True,
@@ -528,13 +531,18 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
     )
 
     # Legende des boites tracees sur les images : sans elle, le lecteur du
-    # rapport n'a aucun moyen de savoir ce que chaque couleur designe.
+    # rapport n'a aucun moyen de savoir ce que chaque couleur designe. La liste
+    # est figee ici : les deux boucles qui suivent doivent parcourir les memes
+    # entrees dans le meme ordre, sinon couleurs et libelles se decalent.
+    entrees_legende = [
+        entree for entree in cfg.LEGENDE_ANNOTATIONS if entree[1] not in cfg.TYPES_MASQUES
+    ]
     cellules = [
         ["", Paragraph(
             f"<b>{libelle.replace('_', ' ')}</b>" + (f" - {glose}" if glose else ""),
             style_legende,
         )]
-        for libelle, _, glose in cfg.LEGENDE_ANNOTATIONS
+        for libelle, _, glose in entrees_legende
     ]
 
     tableau_legende = Table(cellules, colWidths=[12, 468], rowHeights=[14] * len(cellules))
@@ -546,7 +554,7 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
         ("TOPPADDING", (0, 0), (-1, -1), 1),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
     ]
-    for rang, (_, canonique, _) in enumerate(cfg.LEGENDE_ANNOTATIONS):
+    for rang, (_, canonique, _) in enumerate(entrees_legende):
         couleur = cfg.couleur_type(canonique)[0]
         styles_legende.append(("BACKGROUND", (0, rang), (0, rang), colors.HexColor(couleur)))
         styles_legende.append(("BOX", (0, rang), (0, rang), 0.5, colors.HexColor("#9CA3AF")))
