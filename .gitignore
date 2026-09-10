@@ -1,0 +1,16 @@
+# Identifiants : ne doivent JAMAIS etre versionnes.
+tibi-credentials.json
+.streamlit/secrets.toml
+*.json
+
+# Poids de modeles : inutiles au dashboard et trop lourds pour un depot.
+*.pt
+*.onnx
+*.torchscript
+
+# Artefacts Python
+__pycache__/
+*.py[cod]
+
+# Copies de travail
+*- Copie.*

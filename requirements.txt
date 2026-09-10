@@ -1,0 +1,9 @@
+streamlit>=1.31
+altair
+pandas
+pillow
+reportlab
+google-cloud-bigquery
+google-cloud-storage
+pyarrow
+db-dtypes
