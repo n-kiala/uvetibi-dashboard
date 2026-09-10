@@ -195,8 +195,11 @@ st.markdown("</div>", unsafe_allow_html=True)
 # Selection du jour
 # --------------------------------------------------------------------------
 
+# Tout le tableau de bord compte des indesirables (colonne count), jamais des
+# lignes : une ligne porte un couple (vehicule, type) et peut valoir 20 objets.
+# Compter les lignes sous-estimerait le volume d'un facteur 4 a 5.
 jours = sorted(df["date"].unique())
-volumes = df.groupby("date").size().to_dict()
+volumes = df.groupby("date")["count"].sum().to_dict()
 
 if "jour" not in st.session_state or st.session_state.jour not in jours:
     st.session_state.jour = jours[-1]
@@ -205,7 +208,7 @@ st.markdown("##### Jour de collecte")
 
 repartition_jour = (
     df.groupby(["date", "type"])
-    .agg(constats=("type", "size"))
+    .agg(indesirables=("count", "sum"))
     .reset_index()
 )
 repartition_jour["jour"] = repartition_jour["date"].map(cfg.libelle_court)
@@ -226,8 +229,8 @@ graphique = (
             axis=alt.Axis(labelAngle=0, labelPadding=8, domainColor="#d1d5db", ticks=False),
         ),
         y=alt.Y(
-            "constats:Q",
-            title="Constats",
+            "indesirables:Q",
+            title="Indésirables",
             axis=alt.Axis(tickMinStep=1, grid=True, gridColor="#eef0f2", domain=False, ticks=False),
         ),
         color=alt.Color(
@@ -244,12 +247,10 @@ graphique = (
         # a peine : les teintes CVAT etant pastel, les estomper davantage les
         # ramenerait au blanc. Le bouton actif porte deja le signal principal.
         opacity=alt.condition(alt.datum.actif, alt.value(1), alt.value(0.75)),
-        # Volontairement sans le nombre d'objets : cote client, deux compteurs
-        # voisins aux valeurs differentes pretaient a confusion.
         tooltip=[
             alt.Tooltip("jour:N", title="Jour"),
             alt.Tooltip("type:N", title="Type"),
-            alt.Tooltip("constats:Q", title="Constats"),
+            alt.Tooltip("indesirables:Q", title="Indésirables"),
         ],
     )
     .properties(height=240)
@@ -291,15 +292,12 @@ df_jour = df[df["date"] == jour_actif]
 # Indicateurs
 # --------------------------------------------------------------------------
 
-# Le type dominant se juge au nombre d'objets constates (colonne count) et non
-# au nombre de lignes : un seul constat "Sac_non_bio count=12" pese plus que
-# trois lignes a count=1.
 type_dominant = df_jour.groupby("type")["count"].sum().idxmax()
 indicateurs = [
-    ("Constats du jour", str(len(df_jour)), True),
+    ("Indésirables du jour", str(int(df_jour["count"].sum())), True),
     ("Véhicules concernés", str(df_jour["plaque"].nunique()), False),
     ("Type dominant", str(type_dominant).replace("_", " "), False),
-    ("Total sur la période", str(len(df)), False),
+    ("Total sur la période", str(int(df["count"].sum())), False),
 ]
 
 st.write("")
@@ -330,9 +328,9 @@ type_dominant_par_plaque = (
 
 resume_plaques = (
     df_jour.groupby("plaque")
-    .agg(constats=("plaque", "size"))
+    .agg(indesirables=("count", "sum"))
     .join(type_dominant_par_plaque.rename("type_dominant"))
-    .sort_values("constats", ascending=False)
+    .sort_values("indesirables", ascending=False)
     .reset_index()
 )
 
@@ -363,7 +361,7 @@ for ligne in resume_plaques.itertuples():
     with col_nombre:
         st.markdown(
             f'<div style="padding-top:8px; text-align:right; font-weight:600;">'
-            f'{ligne.constats}</div>',
+            f'{ligne.indesirables}</div>',
             unsafe_allow_html=True,
         )
 
