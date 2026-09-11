@@ -13,6 +13,7 @@ import os
 from io import BytesIO
 
 import altair as alt
+import pandas as pd
 import streamlit as st
 from google.cloud import bigquery
 from reportlab.lib import colors
@@ -33,6 +34,10 @@ import config as cfg
 # Active/desactive le bouton "Supprimer ce constat" dans la vue client.
 # A basculer ici uniquement, sans toucher au reste du code.
 AUTORISER_SUPPRESSION = False
+
+# Separateur des exports CSV. Le point-virgule est celui qu'attend Excel en
+# configuration francophone ; a basculer sur "," si Tibi prefere (ENF-05).
+SEPARATEUR_CSV = ";"
 
 st.set_page_config(
     layout="wide",
@@ -136,6 +141,10 @@ if df.empty:
     )
     st.stop()
 
+# Conserve avant filtrage : l'export exhaustif (EF-04) doit porter sur toutes
+# les detections, y compris les types masques et les vehicules sans photo.
+df_integral = df.copy()
+
 df = df[~df["type"].isin(cfg.TYPES_MASQUES)]
 
 # Un vehicule dont toutes les images ont ete supprimees n'a plus rien a montrer
@@ -190,6 +199,36 @@ with col_logo_tibi:
     if os.path.exists(cfg.LOGO_TIBI):
         st.image(cfg.LOGO_TIBI, width=60)
 st.markdown("</div>", unsafe_allow_html=True)
+
+# --------------------------------------------------------------------------
+# Periode analysee (EF-03)
+# --------------------------------------------------------------------------
+
+col_periode_debut, _ = st.columns([2, 5])
+with col_periode_debut:
+    plage = st.date_input(
+        "Période analysée",
+        value=(debut, fin),
+        min_value=debut,
+        max_value=fin,
+        format="DD/MM/YYYY",
+    )
+
+# En cours de saisie, le widget ne renvoie qu'une seule date : on garde alors
+# la periode complete plutot que d'afficher un jeu de donnees incoherent.
+if isinstance(plage, (list, tuple)) and len(plage) == 2:
+    debut_choisi, fin_choisi = plage
+else:
+    debut_choisi, fin_choisi = debut, fin
+
+df = df[(df["date"] >= debut_choisi) & (df["date"] <= fin_choisi)]
+df_integral = df_integral[
+    (df_integral["date"] >= debut_choisi) & (df_integral["date"] <= fin_choisi)
+]
+
+if df.empty:
+    st.info("Aucun constat sur la période choisie.")
+    st.stop()
 
 # --------------------------------------------------------------------------
 # Selection du jour
@@ -289,15 +328,51 @@ jour_actif = st.session_state.jour
 df_jour = df[df["date"] == jour_actif]
 
 # --------------------------------------------------------------------------
+# Selecteur vehicule (EF-02)
+# --------------------------------------------------------------------------
+
+TOUS_VEHICULES = "Tous les véhicules"
+
+plaques_jour = (
+    df_jour.groupby("plaque")["count"].sum().sort_values(ascending=False).index.tolist()
+)
+if st.session_state.get("plaque") not in plaques_jour:
+    st.session_state.plaque = None
+
+col_vehicule, _ = st.columns([2, 5])
+with col_vehicule:
+    # Sans cle explicite, c'est `index` qui fait foi a chaque rerun : le
+    # selecteur suit donc les clics sur la liste des vehicules plus bas.
+    choix_vehicule = st.selectbox(
+        "Véhicule",
+        [TOUS_VEHICULES] + plaques_jour,
+        index=0 if st.session_state.plaque is None else plaques_jour.index(st.session_state.plaque) + 1,
+    )
+
+plaque_choisie = None if choix_vehicule == TOUS_VEHICULES else choix_vehicule
+if plaque_choisie != st.session_state.plaque:
+    st.session_state.plaque = plaque_choisie
+    st.session_state.zoom = None
+    st.rerun()
+
+plaque_active = st.session_state.plaque
+selection = df_jour if plaque_active is None else df_jour[df_jour["plaque"] == plaque_active]
+selection_periode = df if plaque_active is None else df[df["plaque"] == plaque_active]
+
+# --------------------------------------------------------------------------
 # Indicateurs
 # --------------------------------------------------------------------------
 
-type_dominant = df_jour.groupby("type")["count"].sum().idxmax()
+type_dominant = selection.groupby("type")["count"].sum().idxmax()
 indicateurs = [
-    ("Indésirables du jour", str(int(df_jour["count"].sum())), True),
-    ("Véhicules concernés", str(df_jour["plaque"].nunique()), False),
+    (
+        "Indésirables du jour" if plaque_active is None else "Indésirables de ce véhicule",
+        str(int(selection["count"].sum())),
+        True,
+    ),
+    ("Véhicules concernés", str(selection["plaque"].nunique()), False),
     ("Type dominant", str(type_dominant).replace("_", " "), False),
-    ("Total sur la période", str(int(df["count"].sum())), False),
+    ("Total sur la période", str(int(selection_periode["count"].sum())), False),
 ]
 
 st.write("")
@@ -309,6 +384,29 @@ for colonne, (label, valeur, accent) in zip(st.columns(4), indicateurs):
         f'<p class="{classe_valeur}">{valeur}</p></div>',
         unsafe_allow_html=True,
     )
+
+# Panneau "types et nombre" : il suit la selection, alors qu'il restait
+# obstinement sur la journee entiere dans la version precedente (EF-02).
+repartition_selection = (
+    selection.groupby("type")["count"].sum().sort_values(ascending=False)
+)
+detail_types = "".join(
+    f'<span class="annotation">'
+    f'<span class="carre-annotation" style="background:{cfg.couleur_type(type_nom)[0]};"></span>'
+    f'{str(type_nom).replace("_", " ")} '
+    f'<b>{int(nombre)}</b></span>'
+    for type_nom, nombre in repartition_selection.items()
+)
+intitule = (
+    f"Types et nombre &mdash; {cfg.libelle_court(jour_actif)}"
+    if plaque_active is None
+    else f"Types et nombre &mdash; {plaque_active}, {cfg.libelle_court(jour_actif)}"
+)
+st.markdown(
+    f'<div class="bloc-legende"><div class="bloc-legende-titre">{intitule}</div>'
+    f"{detail_types}</div>",
+    unsafe_allow_html=True,
+)
 
 # --------------------------------------------------------------------------
 # Vehicules du jour
@@ -334,9 +432,6 @@ resume_plaques = (
     .reset_index()
 )
 
-if "plaque" not in st.session_state or st.session_state.plaque not in set(resume_plaques["plaque"]):
-    st.session_state.plaque = resume_plaques.iloc[0]["plaque"]
-
 for ligne in resume_plaques.itertuples():
     actif = ligne.plaque == st.session_state.plaque
     fond, texte = cfg.couleur_type(ligne.type_dominant)
@@ -348,7 +443,8 @@ for ligne in resume_plaques.itertuples():
             use_container_width=True,
             type="primary" if actif else "secondary",
         ):
-            st.session_state.plaque = ligne.plaque
+            # Recliquer sur le vehicule actif revient a "Tous les vehicules".
+            st.session_state.plaque = None if actif else ligne.plaque
             st.session_state.zoom = None
             st.rerun()
     with col_badge:
@@ -365,27 +461,31 @@ for ligne in resume_plaques.itertuples():
             unsafe_allow_html=True,
         )
 
-plaque_active = st.session_state.plaque
-
 # --------------------------------------------------------------------------
 # Galerie
 # --------------------------------------------------------------------------
 
 st.divider()
 
-try:
-    images = cfg.lister_images(jour_actif, plaque_active)
-    erreur_images = None
-except Exception as exc:  # noqa: BLE001
-    images, erreur_images = [], exc
+if plaque_active is None:
+    images, erreur_images = [], None
+else:
+    try:
+        images = cfg.lister_images(jour_actif, plaque_active)
+        erreur_images = None
+    except Exception as exc:  # noqa: BLE001
+        images, erreur_images = [], exc
 
 st.markdown(
     f'<div class="legende"><span class="pastille"></span>'
-    f"{cfg.libelle_court(jour_actif)} &middot; plaque {plaque_active}</div>",
+    f"{cfg.libelle_court(jour_actif)} &middot; "
+    f"{'tous les véhicules' if plaque_active is None else f'plaque {plaque_active}'}</div>",
     unsafe_allow_html=True,
 )
 
-if erreur_images is not None:
+if plaque_active is None:
+    st.info("Choisissez un véhicule, ci-dessus ou dans la liste, pour voir ses photos.")
+elif erreur_images is not None:
     st.warning("Les images n'ont pas pu être listées dans Cloud Storage.")
     st.exception(erreur_images)
 elif not images:
@@ -606,3 +706,73 @@ if images:
             mime="application/pdf",
             type="primary",
         )
+
+# --------------------------------------------------------------------------
+# Exports CSV (EF-01 et EF-04)
+# --------------------------------------------------------------------------
+
+
+def en_csv(tableau: pd.DataFrame) -> bytes:
+    """CSV pret pour Excel : point-virgule et UTF-8 avec BOM.
+
+    Sans le BOM, Excel lit les accents en latin-1 et affiche "indésirables".
+    """
+    return tableau.to_csv(index=False, sep=SEPARATEUR_CSV).encode("utf-8-sig")
+
+
+st.divider()
+st.markdown("##### Exporter les données")
+
+periode_fichier = f"{debut_choisi.isoformat()}_{fin_choisi.isoformat()}"
+
+# EF-01 : le comptage par jour ET par plaque, absent de l'export du graphique.
+detail_plaque = (
+    df.groupby(["date", "plaque", "type"])["count"]
+    .sum()
+    .reset_index()
+    .rename(columns={"date": "date", "type": "type_indesirable", "count": "nombre"})
+    .sort_values(["date", "plaque", "type_indesirable"])
+)
+
+# EF-04 : toutes les detections de la periode, y compris celles que le
+# dashboard masque. La colonne `affiche_dans_dashboard` explique tout ecart
+# avec les chiffres a l'ecran (ENF-04).
+couples_visibles = {
+    (jour.isoformat(), str(plaque)) for jour, plaque in zip(df["date"], df["plaque"])
+}
+export_integral = df_integral.assign(
+    heure=df_integral["horodatage"].dt.strftime("%H:%M:%S"),
+    affiche_dans_dashboard=[
+        "oui" if (jour.isoformat(), str(plaque)) in couples_visibles else "non"
+        for jour, plaque in zip(df_integral["date"], df_integral["plaque"])
+    ],
+).rename(columns={"type": "type_indesirable", "count": "nombre"})[
+    ["date", "heure", "plaque", "type_indesirable", "nombre", "score_confiance",
+     "affiche_dans_dashboard"]
+].sort_values(["date", "plaque", "type_indesirable"])
+
+col_export_1, col_export_2, col_info = st.columns([2, 2, 3])
+with col_export_1:
+    st.download_button(
+        "Détail par plaque (CSV)",
+        data=en_csv(detail_plaque),
+        file_name=f"indesirables_par_plaque_{periode_fichier}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+with col_export_2:
+    st.download_button(
+        "Exporter toutes les données (CSV)",
+        data=en_csv(export_integral),
+        file_name=f"indesirables_donnees_completes_{periode_fichier}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+with col_info:
+    st.caption(
+        f"Période exportée : {cfg.libelle_long(debut_choisi)} → {cfg.libelle_long(fin_choisi)}. "
+        f"Détail par plaque : {len(detail_plaque)} lignes, "
+        f"{int(detail_plaque['nombre'].sum())} indésirables, "
+        "somme identique au graphique. Export complet : "
+        f"{len(export_integral)} lignes, dont celles écartées de l'affichage."
+    )
