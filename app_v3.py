@@ -141,10 +141,6 @@ if df.empty:
     )
     st.stop()
 
-# Conserve avant filtrage : l'export exhaustif (EF-04) doit porter sur toutes
-# les detections, y compris les types masques et les vehicules sans photo.
-df_integral = df.copy()
-
 df = df[~df["type"].isin(cfg.TYPES_MASQUES)]
 
 # Un vehicule dont toutes les images ont ete supprimees n'a plus rien a montrer
@@ -222,9 +218,6 @@ else:
     debut_choisi, fin_choisi = debut, fin
 
 df = df[(df["date"] >= debut_choisi) & (df["date"] <= fin_choisi)]
-df_integral = df_integral[
-    (df_integral["date"] >= debut_choisi) & (df_integral["date"] <= fin_choisi)
-]
 
 if df.empty:
     st.info("Aucun constat sur la période choisie.")
@@ -734,22 +727,16 @@ detail_plaque = (
     .sort_values(["date", "plaque", "type_indesirable"])
 )
 
-# EF-04 : toutes les detections de la periode, y compris celles que le
-# dashboard masque. La colonne `affiche_dans_dashboard` explique tout ecart
-# avec les chiffres a l'ecran (ENF-04).
-couples_visibles = {
-    (jour.isoformat(), str(plaque)) for jour, plaque in zip(df["date"], df["plaque"])
-}
-export_integral = df_integral.assign(
-    heure=df_integral["horodatage"].dt.strftime("%H:%M:%S"),
-    affiche_dans_dashboard=[
-        "oui" if (jour.isoformat(), str(plaque)) in couples_visibles else "non"
-        for jour, plaque in zip(df_integral["date"], df_integral["plaque"])
-    ],
-).rename(columns={"type": "type_indesirable", "count": "nombre"})[
-    ["date", "heure", "plaque", "type_indesirable", "nombre", "score_confiance",
-     "affiche_dans_dashboard"]
-].sort_values(["date", "plaque", "type_indesirable"])
+# EF-04 : toutes les detections de la periode, mais uniquement celles que le
+# dashboard presente. Un constat ecarte de l'affichage - type masque, vehicule
+# sans photo - l'est donc aussi de l'export, pour que les deux concordent (ENF-04).
+export_complet = (
+    df.assign(heure=df["horodatage"].dt.strftime("%H:%M:%S"))
+    .rename(columns={"type": "type_indesirable", "count": "nombre"})[
+        ["date", "heure", "plaque", "type_indesirable", "nombre", "score_confiance"]
+    ]
+    .sort_values(["date", "plaque", "type_indesirable"])
+)
 
 col_export_1, col_export_2, col_info = st.columns([2, 2, 3])
 with col_export_1:
@@ -763,7 +750,7 @@ with col_export_1:
 with col_export_2:
     st.download_button(
         "Exporter toutes les données (CSV)",
-        data=en_csv(export_integral),
+        data=en_csv(export_complet),
         file_name=f"indesirables_donnees_completes_{periode_fichier}.csv",
         mime="text/csv",
         use_container_width=True,
@@ -771,8 +758,8 @@ with col_export_2:
 with col_info:
     st.caption(
         f"Période exportée : {cfg.libelle_long(debut_choisi)} → {cfg.libelle_long(fin_choisi)}. "
-        f"Détail par plaque : {len(detail_plaque)} lignes, "
-        f"{int(detail_plaque['nombre'].sum())} indésirables, "
-        "somme identique au graphique. Export complet : "
-        f"{len(export_integral)} lignes, dont celles écartées de l'affichage."
+        f"Détail par plaque : {len(detail_plaque)} lignes. "
+        f"Export complet : {len(export_complet)} lignes, avec l'heure et le score. "
+        f"Les deux totalisent {int(detail_plaque['nombre'].sum())} indésirables, "
+        "comme le graphique."
     )
