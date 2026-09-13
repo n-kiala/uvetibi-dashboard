@@ -733,7 +733,7 @@ detail_plaque = (
 export_complet = (
     df.assign(heure=df["horodatage"].dt.strftime("%H:%M:%S"))
     .rename(columns={"type": "type_indesirable", "count": "nombre"})[
-        ["date", "heure", "plaque", "type_indesirable", "nombre", "score_confiance"]
+        ["date", "heure", "plaque", "type_indesirable", "nombre"]
     ]
     .sort_values(["date", "plaque", "type_indesirable"])
 )
@@ -759,7 +759,7 @@ with col_info:
     st.caption(
         f"Période exportée : {cfg.libelle_long(debut_choisi)} → {cfg.libelle_long(fin_choisi)}. "
         f"Détail par plaque : {len(detail_plaque)} lignes. "
-        f"Export complet : {len(export_complet)} lignes, avec l'heure et le score. "
+        f"Export complet : {len(export_complet)} lignes, avec l'heure de passage. "
         f"Les deux totalisent {int(detail_plaque['nombre'].sum())} indésirables, "
         "comme le graphique."
     )
