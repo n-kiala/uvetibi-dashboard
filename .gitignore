@@ -12,5 +12,9 @@ tibi-credentials.json
 __pycache__/
 *.py[cod]
 
+# Journees verifiees non publiees : lues par la version locale uniquement,
+# jamais poussees (elles contiennent plaques et photos de vehicules).
+lots_locaux/
+
 # Copies de travail
 *- Copie.*

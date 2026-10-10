@@ -57,6 +57,47 @@ colonnes sont lues par position (Date, Heure, Plaque, Dechet, Count, Nom_img).
 Un vehicule n'apparait dans la vue client que s'il lui reste au moins une
 image : les constats sans image sont masques.
 
+## Journees locales (verifiees, non publiees)
+
+Pour consulter des journees dans la version locale sans les publier : copier
+le dossier de chaque journee (`JJ-MM-AAAA`, avec son tableur `suivi_dechet_*.xlsx`
+et un sous-dossier d'images par plaque) dans `lots_locaux/`. Le dashboard local
+les ajoute aux constats BigQuery, sous la forme exacte que leur donnera
+l'ingestion (une ligne par plaque et type), et affiche un bandeau « Version
+locale ». Rien n'est ecrit dans BigQuery ni dans Cloud Storage ; `lots_locaux/`
+est exclu du depot, la version en ligne ne voit donc jamais ces journees. Une
+journee deja presente dans BigQuery n'est jamais comptee deux fois.
+
+Pour publier une journee locale (elle devient alors visible en ligne) :
+
+    python ingerer_suivi.py lots_locaux/07-09-2026 lots_locaux/07-09-2026/suivi_déchet_07_09_2026.xlsx --feuille 2026_09_07
+    python ingerer_suivi.py ... --execute
+
+Un autre dossier peut etre designe par la variable d'environnement `TIBI_LOTS_LOCAUX`.
+
+## Regles d'affichage cote client
+
+- **Photo de plaque** : chaque dossier de camion contient la photo de sa plaque
+  d'immatriculation, nommee `plaque_...` (ou `Plaque_immat_...` dans la galerie
+  publiee). Elle est toujours la premiere image de la galerie. Un camion sans
+  photo de plaque (plaque illisible dans toutes ses videos) n'est pas affiche,
+  comme un constat sans immatriculation (« X »). Les photos manquantes se
+  completent avec `cvat-export\photos_plaques.py` (puis floutage des visages).
+- **Decisions sur les incoherences** : `corrections_plaques.json` (ecrit par
+  la fenetre `cvat-export\decisions_plaques.py`) est applique a l'affichage,
+  sans toucher aux tableurs, aux dossiers ni a BigQuery :
+  - `corrections` : plaque mal saisie remplacee par la bonne (et heure, pour
+    les constats publies a une heure fictive) ;
+  - `decisions_donnees` : lignes du tableur ignorees (saisie en double, par
+    numero de ligne) et images retirees d'une galerie (image rangee aussi
+    chez un autre camion, ou version en double d'une meme image).
+  Ce fichier est exclu du depot (`*.json`) : pour que la version en ligne en
+  tienne compte, corriger a la source (tableur avant ingestion, ou BigQuery)
+  ou versionner ce fichier explicitement. `ingerer_suivi.py` ne l'applique pas.
+- **Types** : Textile est masque ; Incertain est affiche. La definition de
+  chaque categorie (`DEFINITIONS_TYPES` dans `config.py`) est rappelee sous le
+  graphique.
+
 ## Mise en ligne (Streamlit Community Cloud)
 
 Les identifiants ne sont jamais versionnes : `config.py` lit d'abord le secret

@@ -134,6 +134,15 @@ if erreur_chargement is not None:
     st.exception(erreur_chargement)
     st.stop()
 
+# Journees verifiees mais non publiees, lues sur le disque (version locale
+# uniquement : le dossier lots_locaux/ n'existe pas en ligne). Une erreur de
+# lecture ne doit pas priver le client des donnees publiees.
+try:
+    df, jours_non_publies = cfg.ajouter_constats_locaux(df)
+    erreur_locaux = None
+except Exception as exc:  # noqa: BLE001
+    jours_non_publies, erreur_locaux = [], exc
+
 if df.empty:
     st.info(
         f"La table `{cfg.TABLE_REF}` ne contient aucun constat. "
@@ -141,14 +150,21 @@ if df.empty:
     )
     st.stop()
 
+# Plaques mal saisies : decisions validees a l'oeil (corrections_plaques.json), appliquees avant tout filtre.
+df = cfg.appliquer_corrections(df)
+
 df = df[~df["type"].isin(cfg.TYPES_MASQUES)]
+# Constats sans immatriculation (« X »...) : camion non identifie, hors vue client (comme les exports).
+df = df[df["plaque"].map(cfg.plaque_identifiee)]
 
 # Un vehicule dont toutes les images ont ete supprimees n'a plus rien a montrer
 # au client : ses constats sortent du jeu de donnees des le chargement. Filtrer
 # ici plutot qu'a l'affichage garantit que tous les compteurs de la page (jour
 # selectionne, graphique, total sur la periode) parlent des memes constats.
+# Meme regle pour un vehicule sans photo de sa plaque (plaque illisible dans
+# toutes ses videos) : le client ne pourrait pas l'identifier.
 try:
-    couples = cfg.couples_avec_images()
+    couples = cfg.couples_avec_photo_plaque()
     df = df[
         [
             (jour.isoformat(), str(plaque)) in couples
@@ -195,6 +211,17 @@ with col_logo_tibi:
     if os.path.exists(cfg.LOGO_TIBI):
         st.image(cfg.LOGO_TIBI, width=60)
 st.markdown("</div>", unsafe_allow_html=True)
+
+if jours_non_publies:
+    st.info(
+        f"Version locale : {len(jours_non_publies)} journée(s) non publiée(s) "
+        f"({', '.join(j.strftime('%d/%m') for j in jours_non_publies)}), lues sur ce poste "
+        "depuis lots_locaux/. Elles n'apparaissent pas dans la version en ligne.",
+        icon=":material/computer:",
+    )
+if erreur_locaux is not None:
+    st.warning("Les journées locales n'ont pas pu être lues. Le détail technique :")
+    st.exception(erreur_locaux)
 
 # --------------------------------------------------------------------------
 # Periode analysee (EF-03)
@@ -247,7 +274,11 @@ repartition_jour["jour"] = repartition_jour["date"].map(cfg.libelle_court)
 repartition_jour["actif"] = repartition_jour["date"] == st.session_state.jour
 
 libelles_ordonnes = [cfg.libelle_court(jour) for jour in jours]
-types_presents = sorted(repartition_jour["type"].unique())
+# Toutes les categories affichees cote client, toujours dans l'ordre des definitions : la legende ne change pas
+# avec la periode (Incertain n'apparait qu'a partir du 14/09) et reste alignee sur « Definition des categories ».
+types_presents = [canonique for canonique, _, _ in cfg.DEFINITIONS_TYPES if canonique not in cfg.TYPES_MASQUES]
+types_presents += sorted(t for t in repartition_jour["type"].unique() if t not in types_presents)
+repartition_jour["rang"] = repartition_jour["type"].map(types_presents.index)
 
 graphique = (
     alt.Chart(repartition_jour)
@@ -275,6 +306,8 @@ graphique = (
             # que celle de la galerie.
             legend=None,
         ),
+        # Empilement dans l'ordre de la legende (Sac non bio en bas).
+        order=alt.Order("rang:Q", sort="ascending"),
         # Le jour selectionne reste en pleine couleur, les autres s'estompent
         # a peine : les teintes CVAT etant pastel, les estomper davantage les
         # ramenerait au blanc. Le bouton actif porte deja le signal principal.
@@ -302,6 +335,17 @@ st.markdown(
     ),
     unsafe_allow_html=True,
 )
+
+with st.expander("Définition des catégories", icon=":material/info:"):
+    st.markdown(
+        "".join(
+            f'<div class="annotation" style="white-space:normal; display:block; margin-bottom:6px;">'
+            f'<span class="carre-annotation" style="background:{cfg.couleur_type(canonique)[0]};"></span>'
+            f"<b>{libelle}</b> &mdash; {definition}</div>"
+            for canonique, libelle, definition in cfg.DEFINITIONS_TYPES
+        ),
+        unsafe_allow_html=True,
+    )
 
 colonnes = st.columns(min(len(jours), 8))
 for index, jour in enumerate(jours):
@@ -580,7 +624,7 @@ else:
 
                     cfg.vider_caches()
                     st.session_state.zoom = None
-                    st.success("Image et constat supprimes.")
+                    st.success("Image et constat supprimés.")
                     st.rerun()
     else:
         for depart in range(0, len(images), 3):
