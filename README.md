@@ -94,6 +94,11 @@ Un autre dossier peut etre designe par la variable d'environnement `TIBI_LOTS_LO
   Ce fichier est exclu du depot (`*.json`) : pour que la version en ligne en
   tienne compte, corriger a la source (tableur avant ingestion, ou BigQuery)
   ou versionner ce fichier explicitement. `ingerer_suivi.py` ne l'applique pas.
+- **Indicateurs** : le graphique, les boutons de jour et la rangee du jour
+  portent toujours sur tous les vehicules, quel que soit le vehicule choisi.
+  On choisit un vehicule uniquement dans la liste « Vehicules concernes ce
+  jour » (plus de menu deroulant en doublon) ; ses propres indicateurs (jour et
+  periode) s'affichent alors dans un bloc a son nom, au-dessus de sa galerie.
 - **Types** : Textile est masque ; Incertain est affiche. La definition de
   chaque categorie (`DEFINITIONS_TYPES` dans `config.py`) est rappelee sous le
   graphique.

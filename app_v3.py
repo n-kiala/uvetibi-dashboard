@@ -73,7 +73,6 @@ st.markdown(
         display: inline-block; font-size: 12px; padding: 3px 10px;
         border-radius: 8px; font-weight: 500;
     }}
-    .legende {{ font-size: 13px; color: #6b7280; margin-bottom: 10px; }}
     .bloc-legende {{
         background: #f8f9fa; border-radius: 10px; padding: 10px 14px 12px 14px;
         margin-bottom: 14px; line-height: 2;
@@ -88,10 +87,6 @@ st.markdown(
         border: 1px solid rgba(0, 0, 0, .18); margin-right: 6px; vertical-align: middle;
     }}
     .annotation-glose {{ color: #6b7280; }}
-    .pastille {{
-        display: inline-block; width: 8px; height: 8px; border-radius: 2px;
-        background: {cfg.LIME}; margin-right: 7px; vertical-align: middle;
-    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -364,93 +359,79 @@ for index, jour in enumerate(jours):
 jour_actif = st.session_state.jour
 df_jour = df[df["date"] == jour_actif]
 
-# --------------------------------------------------------------------------
-# Selecteur vehicule (EF-02)
-# --------------------------------------------------------------------------
-
-TOUS_VEHICULES = "Tous les véhicules"
-
-plaques_jour = (
-    df_jour.groupby("plaque")["count"].sum().sort_values(ascending=False).index.tolist()
-)
-if st.session_state.get("plaque") not in plaques_jour:
+if st.session_state.get("plaque") not in set(df_jour["plaque"]):
     st.session_state.plaque = None
-
-col_vehicule, _ = st.columns([2, 5])
-with col_vehicule:
-    # Sans cle explicite, c'est `index` qui fait foi a chaque rerun : le
-    # selecteur suit donc les clics sur la liste des vehicules plus bas.
-    choix_vehicule = st.selectbox(
-        "Véhicule",
-        [TOUS_VEHICULES] + plaques_jour,
-        index=0 if st.session_state.plaque is None else plaques_jour.index(st.session_state.plaque) + 1,
-    )
-
-plaque_choisie = None if choix_vehicule == TOUS_VEHICULES else choix_vehicule
-if plaque_choisie != st.session_state.plaque:
-    st.session_state.plaque = plaque_choisie
-    st.session_state.zoom = None
-    st.rerun()
-
 plaque_active = st.session_state.plaque
-selection = df_jour if plaque_active is None else df_jour[df_jour["plaque"] == plaque_active]
-selection_periode = df if plaque_active is None else df[df["plaque"] == plaque_active]
 
-# --------------------------------------------------------------------------
-# Indicateurs
-# --------------------------------------------------------------------------
 
-type_dominant = selection.groupby("type")["count"].sum().idxmax()
-indicateurs = [
-    (
-        "Indésirables du jour" if plaque_active is None else "Indésirables de ce véhicule",
-        str(int(selection["count"].sum())),
-        True,
-    ),
-    ("Véhicules concernés", str(selection["plaque"].nunique()), False),
-    ("Type dominant", str(type_dominant).replace("_", " "), False),
-    ("Total sur la période", str(int(selection_periode["count"].sum())), False),
-]
+def cartes_indicateurs(indicateurs) -> None:
+    """Rangee de cartes ; `indicateurs` : suite de (libelle, valeur, accent)."""
+    st.write("")
+    for colonne, (label, valeur, accent) in zip(st.columns(len(indicateurs)), indicateurs):
+        classe_valeur = "carte-valeur" if valeur.isdigit() else "carte-valeur-texte"
+        colonne.markdown(
+            f'<div class="carte {"carte-active" if accent else ""}">'
+            f'<div class="carte-label">{label}</div>'
+            f'<p class="{classe_valeur}">{valeur}</p></div>',
+            unsafe_allow_html=True,
+        )
 
-st.write("")
-for colonne, (label, valeur, accent) in zip(st.columns(4), indicateurs):
-    classe_valeur = "carte-valeur" if valeur.isdigit() else "carte-valeur-texte"
-    colonne.markdown(
-        f'<div class="carte {"carte-active" if accent else ""}">'
-        f'<div class="carte-label">{label}</div>'
-        f'<p class="{classe_valeur}">{valeur}</p></div>',
+
+def panneau_types(intitule: str, constats: pd.DataFrame) -> None:
+    """Nombre d'indesirables par type, du plus frequent au moins frequent."""
+    repartition = constats.groupby("type")["count"].sum().sort_values(ascending=False)
+    detail_types = "".join(
+        f'<span class="annotation">'
+        f'<span class="carre-annotation" style="background:{cfg.couleur_type(type_nom)[0]};"></span>'
+        f'{str(type_nom).replace("_", " ")} '
+        f'<b>{int(nombre)}</b></span>'
+        for type_nom, nombre in repartition.items()
+    )
+    st.markdown(
+        f'<div class="bloc-legende"><div class="bloc-legende-titre">{intitule}</div>'
+        f"{detail_types}</div>",
         unsafe_allow_html=True,
     )
 
-# Panneau "types et nombre" : il suit la selection, alors qu'il restait
-# obstinement sur la journee entiere dans la version precedente (EF-02).
-repartition_selection = (
-    selection.groupby("type")["count"].sum().sort_values(ascending=False)
-)
-detail_types = "".join(
-    f'<span class="annotation">'
-    f'<span class="carre-annotation" style="background:{cfg.couleur_type(type_nom)[0]};"></span>'
-    f'{str(type_nom).replace("_", " ")} '
-    f'<b>{int(nombre)}</b></span>'
-    for type_nom, nombre in repartition_selection.items()
-)
-intitule = (
-    f"Types et nombre &mdash; {cfg.libelle_court(jour_actif)}"
-    if plaque_active is None
-    else f"Types et nombre &mdash; {plaque_active}, {cfg.libelle_court(jour_actif)}"
-)
-st.markdown(
-    f'<div class="bloc-legende"><div class="bloc-legende-titre">{intitule}</div>'
-    f"{detail_types}</div>",
-    unsafe_allow_html=True,
+
+def type_dominant(constats: pd.DataFrame) -> str:
+    return str(constats.groupby("type")["count"].sum().idxmax()).replace("_", " ")
+
+
+# --------------------------------------------------------------------------
+# Indicateurs du jour
+# --------------------------------------------------------------------------
+
+# Cette rangee porte toujours sur tous les vehicules du jour, comme le
+# graphique et les boutons de jour : elle ne change pas quand un vehicule est
+# choisi. Elle basculait auparavant sur le vehicule, ce qui melangeait deux
+# portees a l'ecran (graphique global, « Total sur la periode » du seul
+# vehicule, « Vehicules concernes » a 1). Les chiffres du vehicule ont
+# desormais leur propre bloc, au-dessus de sa galerie.
+st.write("")
+st.markdown(f"##### {cfg.libelle_court(jour_actif)} — tous les véhicules")
+cartes_indicateurs([
+    ("Indésirables du jour", str(int(df_jour["count"].sum())), True),
+    ("Véhicules concernés", str(df_jour["plaque"].nunique()), False),
+    ("Type dominant du jour", type_dominant(df_jour), False),
+    ("Total sur la période", str(int(df["count"].sum())), False),
+])
+panneau_types(
+    f"Types et nombre &mdash; {cfg.libelle_court(jour_actif)}, tous les véhicules", df_jour
 )
 
 # --------------------------------------------------------------------------
-# Vehicules du jour
+# Vehicules du jour (EF-02)
 # --------------------------------------------------------------------------
 
+# Seul selecteur de vehicule de la page : un menu deroulant « Vehicule » le
+# doublait et laissait croire que tout l'ecran suivait le vehicule choisi.
 st.write("")
 st.markdown("##### Véhicules concernés ce jour")
+st.caption(
+    "Cliquez sur un véhicule pour afficher ses indicateurs et ses photos ; "
+    "un second clic le désélectionne."
+)
 
 type_dominant_par_plaque = (
     df_jour.groupby(["plaque", "type"])["count"]
@@ -474,13 +455,15 @@ for ligne in resume_plaques.itertuples():
     fond, texte = cfg.couleur_type(ligne.type_dominant)
     col_bouton, col_badge, col_nombre = st.columns([5, 3, 1])
     with col_bouton:
+        # Pas d'espaces en tete du libelle : quatre espaces font lire la plaque
+        # comme du code Markdown (police a chasse fixe, en vert).
         if st.button(
-            f"{'▸' if actif else '  '}  {ligne.plaque}",
+            f"▸ {ligne.plaque}" if actif else ligne.plaque,
             key=f"plaque_{ligne.plaque}",
             use_container_width=True,
             type="primary" if actif else "secondary",
         ):
-            # Recliquer sur le vehicule actif revient a "Tous les vehicules".
+            # Recliquer sur le vehicule actif le deselectionne.
             st.session_state.plaque = None if actif else ligne.plaque
             st.session_state.zoom = None
             st.rerun()
@@ -499,7 +482,7 @@ for ligne in resume_plaques.itertuples():
         )
 
 # --------------------------------------------------------------------------
-# Galerie
+# Vehicule choisi : indicateurs et galerie
 # --------------------------------------------------------------------------
 
 st.divider()
@@ -507,21 +490,26 @@ st.divider()
 if plaque_active is None:
     images, erreur_images = [], None
 else:
+    vehicule_jour = df_jour[df_jour["plaque"] == plaque_active]
+    vehicule_periode = df[df["plaque"] == plaque_active]
+    st.markdown(f"##### Véhicule {plaque_active} — {cfg.libelle_court(jour_actif)}")
+    cartes_indicateurs([
+        ("Indésirables ce jour", str(int(vehicule_jour["count"].sum())), True),
+        ("Type dominant ce jour", type_dominant(vehicule_jour), False),
+        ("Jours concernés sur la période", str(vehicule_periode["date"].nunique()), False),
+        ("Total du véhicule sur la période", str(int(vehicule_periode["count"].sum())), False),
+    ])
+    panneau_types(
+        f"Types et nombre &mdash; {plaque_active}, {cfg.libelle_court(jour_actif)}", vehicule_jour
+    )
     try:
         images = cfg.lister_images(jour_actif, plaque_active)
         erreur_images = None
     except Exception as exc:  # noqa: BLE001
         images, erreur_images = [], exc
 
-st.markdown(
-    f'<div class="legende"><span class="pastille"></span>'
-    f"{cfg.libelle_court(jour_actif)} &middot; "
-    f"{'tous les véhicules' if plaque_active is None else f'plaque {plaque_active}'}</div>",
-    unsafe_allow_html=True,
-)
-
 if plaque_active is None:
-    st.info("Choisissez un véhicule, ci-dessus ou dans la liste, pour voir ses photos.")
+    st.info("Choisissez un véhicule dans la liste ci-dessus pour afficher ses indicateurs et ses photos.")
 elif erreur_images is not None:
     st.warning("Les images n'ont pas pu être listées dans Cloud Storage.")
     st.exception(erreur_images)
