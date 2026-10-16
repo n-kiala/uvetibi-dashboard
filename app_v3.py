@@ -69,6 +69,12 @@ st.markdown(
     .carte-label {{ font-size: 13px; color: #6c757d; }}
     .carte-valeur {{ font-size: 26px; font-weight: 700; color: #111827; margin: 0; }}
     .carte-valeur-texte {{ font-size: 17px; font-weight: 600; color: #111827; margin: 6px 0 0 0; }}
+    .carte-precision {{ font-size: 12px; color: #6b7280; margin-top: 4px; }}
+    .rangee-cartes {{
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 6px;
+    }}
+    .rangee-cartes .carte {{ margin-bottom: 0; }}
+    @media (max-width: 640px) {{ .rangee-cartes {{ grid-template-columns: 1fr 1fr; }} }}
     .bloc-legende {{
         background: #f8f9fa; border-radius: 10px; padding: 10px 14px 12px 14px;
         margin-bottom: 14px; line-height: 2;
@@ -361,16 +367,22 @@ plaque_active = st.session_state.plaque
 
 
 def cartes_indicateurs(indicateurs) -> None:
-    """Rangee de cartes ; `indicateurs` : suite de (libelle, valeur, accent)."""
+    """Rangee de cartes ; `indicateurs` : suite de (libelle, valeur, accent, precision).
+
+    La precision, facultative, s'affiche en petit sous la valeur. Une seule
+    grille HTML plutot que des st.columns : toutes les cartes de la rangee
+    prennent la hauteur de la plus haute, avec ou sans precision.
+    """
+    cartes = "".join(
+        f'<div class="carte {"carte-active" if accent else ""}">'
+        f'<div class="carte-label">{label}</div>'
+        f'<p class="{"carte-valeur" if valeur.isdigit() else "carte-valeur-texte"}">{valeur}</p>'
+        + (f'<div class="carte-precision">{precision}</div>' if precision else "")
+        + "</div>"
+        for label, valeur, accent, precision in indicateurs
+    )
     st.write("")
-    for colonne, (label, valeur, accent) in zip(st.columns(len(indicateurs)), indicateurs):
-        classe_valeur = "carte-valeur" if valeur.isdigit() else "carte-valeur-texte"
-        colonne.markdown(
-            f'<div class="carte {"carte-active" if accent else ""}">'
-            f'<div class="carte-label">{label}</div>'
-            f'<p class="{classe_valeur}">{valeur}</p></div>',
-            unsafe_allow_html=True,
-        )
+    st.markdown(f'<div class="rangee-cartes">{cartes}</div>', unsafe_allow_html=True)
 
 
 def panneau_types(intitule: str, constats: pd.DataFrame) -> None:
@@ -404,13 +416,22 @@ def type_dominant(constats: pd.DataFrame) -> str:
 # portees a l'ecran (graphique global, « Total sur la periode » du seul
 # vehicule, « Vehicules concernes » a 1). Les chiffres du vehicule ont
 # desormais leur propre bloc, au-dessus de sa galerie.
+# Les cartes « periode » disent en clair de quelles dates elles parlent :
+# « sur la periode » seul ne disait pas laquelle.
+periode_affichee = f"du {debut_choisi:%d/%m} au {fin_choisi:%d/%m}"
+
 st.write("")
 st.markdown(f"##### {cfg.libelle_court(jour_actif)} — tous les véhicules")
 cartes_indicateurs([
-    ("Indésirables du jour", str(int(df_jour["count"].sum())), True),
-    ("Véhicules concernés", str(df_jour["plaque"].nunique()), False),
-    ("Type dominant du jour", type_dominant(df_jour), False),
-    ("Total sur la période", str(int(df["count"].sum())), False),
+    ("Indésirables du jour", str(int(df_jour["count"].sum())), True, ""),
+    ("Véhicules concernés", str(df_jour["plaque"].nunique()), False, ""),
+    ("Type dominant du jour", type_dominant(df_jour), False, ""),
+    (
+        "Indésirables cumulés",
+        str(int(df["count"].sum())),
+        False,
+        f"tous véhicules, {periode_affichee}",
+    ),
 ])
 panneau_types(
     f"Types et nombre &mdash; {cfg.libelle_court(jour_actif)}, tous les véhicules", df_jour
@@ -466,10 +487,20 @@ else:
     vehicule_periode = df[df["plaque"] == plaque_active]
     st.markdown(f"##### Véhicule {plaque_active} — {cfg.libelle_court(jour_actif)}")
     cartes_indicateurs([
-        ("Indésirables ce jour", str(int(vehicule_jour["count"].sum())), True),
-        ("Type dominant ce jour", type_dominant(vehicule_jour), False),
-        ("Jours concernés sur la période", str(vehicule_periode["date"].nunique()), False),
-        ("Total du véhicule sur la période", str(int(vehicule_periode["count"].sum())), False),
+        ("Indésirables ce jour", str(int(vehicule_jour["count"].sum())), True, ""),
+        ("Type dominant ce jour", type_dominant(vehicule_jour), False, ""),
+        (
+            "Jours avec indésirables",
+            str(vehicule_periode["date"].nunique()),
+            False,
+            f"sur {len(jours)} jour{'s' if len(jours) > 1 else ''} de collecte, {periode_affichee}",
+        ),
+        (
+            "Indésirables cumulés",
+            str(int(vehicule_periode["count"].sum())),
+            False,
+            f"ce véhicule, {periode_affichee}",
+        ),
     ])
     panneau_types(
         f"Types et nombre &mdash; {plaque_active}, {cfg.libelle_court(jour_actif)}", vehicule_jour
