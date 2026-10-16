@@ -135,6 +135,17 @@ DEFINITIONS_TYPES = [
                                "suspecte fortement que le déchet n'est pas un déchet organique."),
 ]
 
+# Mention de protection des donnees, en pied du tableau de bord et du rapport PDF (recommandation du client,
+# 15/10) : immatriculations et photos permettent d'identifier des vehicules, donc indirectement leurs equipes.
+MENTION_RGPD_TITRE = "Protection des données (RGPD)"
+MENTION_RGPD = (
+    "Les informations présentées sur ce tableau de bord (immatriculations, photos des déchargements, constats "
+    "d'indésirables) sont traitées dans le seul cadre du suivi de la qualité de la collecte FFOM à l'UVE de Tibi. "
+    "Elles sont réservées à un usage strictement professionnel par les personnes autorisées et ne peuvent être ni "
+    "utilisées à d'autres fins, ni diffusées en dehors de ce cadre. Cette règle s'applique aussi aux rapports PDF "
+    "et aux exports CSV. Responsable du traitement : Neurogreen SRL, info@neurogreen.be."
+)
+
 
 _PLAQUE_RE = re.compile(r"[A-Z]{3}-?\d{3}|\d{3}-?[A-Z]{3}")
 

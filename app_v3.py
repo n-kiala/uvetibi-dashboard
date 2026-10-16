@@ -89,6 +89,9 @@ st.markdown(
         border: 1px solid rgba(0, 0, 0, .18); margin-right: 6px; vertical-align: middle;
     }}
     .annotation-glose {{ color: #6b7280; }}
+    /* Fleches de l'image agrandie : le rappel du raccourci clavier (« ← »)
+       doublerait la fleche ; il reste affiche sur « Fermer » (Esc). */
+    .st-key-prec kbd, .st-key-suiv kbd {{ display: none; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -535,17 +538,22 @@ else:
 
     if st.session_state.zoom is not None:
         index = st.session_state.zoom % len(images)
-        st.image(cfg.telecharger_image(images[index]), use_container_width=True)
-        col_info, col_prec, col_suiv, col_fermer = st.columns([6, 1, 1, 1])
+        # Fleches de part et d'autre de l'image, et non plus dessous : il
+        # fallait faire defiler la page a chaque photo pour les atteindre
+        # (retour client). Les touches gauche / droite et Echap font de meme.
+        col_info, col_fermer = st.columns([8, 1], vertical_alignment="center")
         col_info.markdown(f"**Figure {index + 1} sur {len(images)}**")
-        if col_prec.button("←", key="prec", use_container_width=True):
+        if col_fermer.button("Fermer", key="fermer", shortcut="Esc", use_container_width=True):
+            st.session_state.zoom = None
+            st.rerun()
+        col_prec, col_image, col_suiv = st.columns([1, 14, 1], vertical_alignment="center")
+        with col_image:
+            st.image(cfg.telecharger_image(images[index]), use_container_width=True)
+        if col_prec.button("←", key="prec", shortcut="Left", use_container_width=True):
             st.session_state.zoom = (index - 1) % len(images)
             st.rerun()
-        if col_suiv.button("→", key="suiv", use_container_width=True):
+        if col_suiv.button("→", key="suiv", shortcut="Right", use_container_width=True):
             st.session_state.zoom = (index + 1) % len(images)
-            st.rerun()
-        if col_fermer.button("Fermer", key="fermer", use_container_width=True):
-            st.session_state.zoom = None
             st.rerun()
 
         if AUTORISER_SUPPRESSION:
@@ -716,6 +724,16 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
         if numero % 2 == 0 and numero < len(noms_blobs):
             contenu.append(PageBreak())
 
+    # Le rapport circule hors du tableau de bord : il emporte la mention RGPD.
+    style_mention = ParagraphStyle(
+        "MentionRGPD",
+        parent=style_legende,
+        fontSize=7.5,
+        leading=10,
+        textColor=colors.HexColor("#6b7280"),
+    )
+    contenu.append(Paragraph(f"<b>{cfg.MENTION_RGPD_TITRE}</b> - {cfg.MENTION_RGPD}", style_mention))
+
     document.build(contenu)
     return tampon.getvalue()
 
@@ -798,3 +816,10 @@ with col_info:
         f"Les deux totalisent {int(detail_plaque['nombre'].sum())} indésirables, "
         "comme le graphique."
     )
+
+# --------------------------------------------------------------------------
+# Mention RGPD
+# --------------------------------------------------------------------------
+
+st.divider()
+st.caption(f":material/shield_lock: **{cfg.MENTION_RGPD_TITRE}** — {cfg.MENTION_RGPD}")
