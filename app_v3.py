@@ -69,10 +69,6 @@ st.markdown(
     .carte-label {{ font-size: 13px; color: #6c757d; }}
     .carte-valeur {{ font-size: 26px; font-weight: 700; color: #111827; margin: 0; }}
     .carte-valeur-texte {{ font-size: 17px; font-weight: 600; color: #111827; margin: 6px 0 0 0; }}
-    .badge {{
-        display: inline-block; font-size: 12px; padding: 3px 10px;
-        border-radius: 8px; font-weight: 500;
-    }}
     .bloc-legende {{
         background: #f8f9fa; border-radius: 10px; padding: 10px 14px 12px 14px;
         margin-bottom: 14px; line-height: 2;
@@ -433,53 +429,29 @@ st.caption(
     "un second clic le désélectionne."
 )
 
-type_dominant_par_plaque = (
-    df_jour.groupby(["plaque", "type"])["count"]
-    .sum()
-    .reset_index()
-    .sort_values("count", ascending=False)
-    .drop_duplicates("plaque")
-    .set_index("plaque")["type"]
+# Boutons seuls, du vehicule le plus concerne au moins concerne : le type
+# dominant et le nombre de chaque vehicule, affiches a cote, redisaient le
+# panneau « Types et nombre » du jour ; ils restent dans le bloc du vehicule.
+plaques_jour = (
+    df_jour.groupby("plaque")["count"].sum().sort_values(ascending=False).index.tolist()
 )
 
-resume_plaques = (
-    df_jour.groupby("plaque")
-    .agg(indesirables=("count", "sum"))
-    .join(type_dominant_par_plaque.rename("type_dominant"))
-    .sort_values("indesirables", ascending=False)
-    .reset_index()
-)
-
-for ligne in resume_plaques.itertuples():
-    actif = ligne.plaque == st.session_state.plaque
-    fond, texte = cfg.couleur_type(ligne.type_dominant)
-    col_bouton, col_badge, col_nombre = st.columns([5, 3, 1])
-    with col_bouton:
+colonnes_vehicules = st.columns(min(len(plaques_jour), 4))
+for index, plaque in enumerate(plaques_jour):
+    actif = plaque == st.session_state.plaque
+    with colonnes_vehicules[index % len(colonnes_vehicules)]:
         # Pas d'espaces en tete du libelle : quatre espaces font lire la plaque
         # comme du code Markdown (police a chasse fixe, en vert).
         if st.button(
-            f"▸ {ligne.plaque}" if actif else ligne.plaque,
-            key=f"plaque_{ligne.plaque}",
+            f"▸ {plaque}" if actif else plaque,
+            key=f"plaque_{plaque}",
             use_container_width=True,
             type="primary" if actif else "secondary",
         ):
             # Recliquer sur le vehicule actif le deselectionne.
-            st.session_state.plaque = None if actif else ligne.plaque
+            st.session_state.plaque = None if actif else plaque
             st.session_state.zoom = None
             st.rerun()
-    with col_badge:
-        st.markdown(
-            f'<div style="padding-top:8px;"><span class="badge" '
-            f'style="background:{fond}; color:{texte};">'
-            f'{str(ligne.type_dominant).replace("_", " ")}</span></div>',
-            unsafe_allow_html=True,
-        )
-    with col_nombre:
-        st.markdown(
-            f'<div style="padding-top:8px; text-align:right; font-weight:600;">'
-            f'{ligne.indesirables}</div>',
-            unsafe_allow_html=True,
-        )
 
 # --------------------------------------------------------------------------
 # Vehicule choisi : indicateurs et galerie
