@@ -31,6 +31,14 @@ from reportlab.platypus import (
 
 import config as cfg
 
+# Sur Streamlit Cloud, une mise a jour du depot relance ce script sans recharger
+# config.py deja importe : l'application cherchait alors une constante absente de
+# l'ancienne version (22/10). On recharge config.py s'il date d'avant la mise a jour.
+if not hasattr(cfg, "JOURS_EXCLUS"):
+    import importlib
+
+    cfg = importlib.reload(cfg)
+
 # Active/desactive le bouton "Supprimer ce constat" dans la vue client.
 # A basculer ici uniquement, sans toucher au reste du code.
 AUTORISER_SUPPRESSION = False
