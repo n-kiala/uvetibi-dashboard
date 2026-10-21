@@ -91,6 +91,13 @@ COULEUR_TYPE_DEFAUT = ("#E5E7EB", "#374151")
 # Incertain est affiche (decision du 10/10) : voir sa definition dans DEFINITIONS_TYPES.
 TYPES_MASQUES = {"Textile"}
 
+# Journees ecartees de la vue client, sur le meme principe : leurs constats et
+# leurs images restent en base, mais ne sont ni affiches, ni comptes, ni exportes.
+# 25/09 : retiree le 22/10 (journee non representative de la collecte FFOM ;
+# voir l'echange avec Tibi du 15/10 sur un possible dechargement d'ordures
+# menageres dans la fosse ce jour-la).
+JOURS_EXCLUS = {date(2026, 9, 25)}
+
 # Variantes de saisie (casse, orthographe) ramenees vers un type canonique
 # ci-dessus, pour que chaque erreur ne soit comptee et coloree qu'une fois.
 TYPES_CANONIQUES = {

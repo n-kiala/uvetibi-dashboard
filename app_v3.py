@@ -154,6 +154,7 @@ if df.empty:
 df = cfg.appliquer_corrections(df)
 
 df = df[~df["type"].isin(cfg.TYPES_MASQUES)]
+df = df[~df["date"].isin(cfg.JOURS_EXCLUS)]
 # Constats sans immatriculation (« X »...) : camion non identifie, hors vue client (comme les exports).
 df = df[df["plaque"].map(cfg.plaque_identifiee)]
 

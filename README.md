@@ -99,6 +99,9 @@ Un autre dossier peut etre designe par la variable d'environnement `TIBI_LOTS_LO
   On choisit un vehicule uniquement dans la liste « Vehicules concernes ce
   jour » (plus de menu deroulant en doublon) ; ses propres indicateurs (jour et
   periode) s'affichent alors dans un bloc a son nom, au-dessus de sa galerie.
+- **Journees ecartees** : `JOURS_EXCLUS` (`config.py`) retire une journee de la
+  vue client (graphique, vehicules, exports) sans rien supprimer en base. Le
+  25/09 en est retire depuis le 22/10.
 - **Mention RGPD** : `MENTION_RGPD` (`config.py`) est affichee en pied du
   tableau de bord et a la fin de chaque rapport PDF.
 - **Types** : Textile est masque ; Incertain est affiche. La definition de
