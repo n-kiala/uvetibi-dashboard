@@ -33,8 +33,9 @@ import config as cfg
 
 # Sur Streamlit Cloud, une mise a jour du depot relance ce script sans recharger
 # config.py deja importe : l'application cherchait alors une constante absente de
-# l'ancienne version (22/10). On recharge config.py s'il date d'avant la mise a jour.
-if not hasattr(cfg, "JOURS_EXCLUS"):
+# l'ancienne version (22/10). On recharge config.py s'il n'est pas celui attendu
+# (VERSION_CONFIG, a changer en meme temps dans les deux fichiers).
+if getattr(cfg, "VERSION_CONFIG", None) != "2026-10-22.2":
     import importlib
 
     cfg = importlib.reload(cfg)

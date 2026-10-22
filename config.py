@@ -98,6 +98,10 @@ TYPES_MASQUES = {"Textile"}
 # menageres dans la fosse ce jour-la).
 JOURS_EXCLUS = {date(2026, 9, 25)}
 
+# Version de ce fichier : app_v3.py le recharge si celle qu'il a en memoire est differente. Sur Streamlit Cloud,
+# une mise a jour du depot relance app_v3.py sans recharger config.py deja importe. A changer a chaque modification.
+VERSION_CONFIG = "2026-10-22.2"
+
 # Variantes de saisie (casse, orthographe) ramenees vers un type canonique
 # ci-dessus, pour que chaque erreur ne soit comptee et coloree qu'une fois.
 TYPES_CANONIQUES = {
@@ -532,13 +536,22 @@ def cle_galerie(nom: str):
     return (0 if est_photo_plaque(nom) else 1, os.path.basename(nom).lower())
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def telecharger_image(nom_blob: str) -> bytes:
-    """Image pleine resolution, en octets (Cloud Storage, ou disque pour une journee locale)."""
+def _lire_image(nom_blob: str) -> bytes:
+    """Image pleine resolution, en octets (Cloud Storage, ou disque pour une journee locale), sans cache."""
     if nom_blob.startswith(PREFIXE_LOCAL):
         with open(nom_blob[len(PREFIXE_LOCAL):], "rb") as fichier:
             return fichier.read()
     return client_storage().bucket(BUCKET).blob(nom_blob).download_as_bytes()
+
+
+# Memoire bornee (22/10) : Streamlit Cloud coupe l'application au-dela d'environ 1 Go. Une image pleine
+# resolution pese 2 a 3 Mo ; sans limite, les galeries parcourues pendant 30 min (controle qualite de toutes
+# les journees) depassaient ce plafond et l'application ne repondait plus. Seules les images agrandies et celles
+# du rapport PDF passent par ce cache ; les vignettes (~40 Ko) ont le leur.
+@st.cache_data(ttl=1800, max_entries=40, show_spinner=False)
+def telecharger_image(nom_blob: str) -> bytes:
+    """Image pleine resolution, en octets (cache limite aux 40 dernieres)."""
+    return _lire_image(nom_blob)
 
 
 def supprimer_image(nom_blob: str) -> None:
@@ -550,14 +563,14 @@ def supprimer_image(nom_blob: str) -> None:
     client_storage().bucket(BUCKET).blob(nom_blob).delete()
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=1800, max_entries=1000, show_spinner=False)
 def vignette(nom_blob: str, largeur: int = 480) -> bytes:
     """Version reduite d'une image, generee a la volee.
 
-    Le bucket ne contient pas de miniatures : on telecharge donc l'original
-    une fois, on le reduit, et le cache evite les appels reseau suivants.
+    Le bucket ne contient pas de miniatures : on telecharge donc l'original, on
+    le reduit, et seule la vignette est gardee en cache (pas l'original).
     """
-    brut = telecharger_image(nom_blob)
+    brut = _lire_image(nom_blob)
     image = Image.open(io.BytesIO(brut))
     image = image.convert("RGB")
     ratio = largeur / image.width
