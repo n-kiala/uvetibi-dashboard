@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 from google.cloud import bigquery, storage
+from google.api_core.exceptions import NotFound
 from google.oauth2 import service_account
 from PIL import Image
 
@@ -45,6 +46,13 @@ TABLE_REF = f"{PROJECT_ID}.{DATASET}.{TABLE}"
 
 BUCKET = "uvetibi"
 GALERIE_PREFIX = "tibilevel_test_isapi/Galerie_erreur"
+
+# Miniatures pregenerees (M4): meme arborescence que la galerie, sous ce prefixe,
+# nom de l'original + ".jpg".
+# Hors de GALERIE_PREFIX pour que _inventaire_galerie() ne les liste pas comme des
+#  images de la galeierie.
+
+PREFIXE_MINIATURES = "miniatures"
 
 # Journees verifiees mais pas encore publiees (version locale uniquement) : un
 # dossier par jour (JJ-MM-AAAA) avec le tableur de suivi et un sous-dossier
@@ -563,14 +571,12 @@ def supprimer_image(nom_blob: str) -> None:
     client_storage().bucket(BUCKET).blob(nom_blob).delete()
 
 
-@st.cache_data(ttl=1800, max_entries=1000, show_spinner=False)
-def vignette(nom_blob: str, largeur: int = 480) -> bytes:
-    """Version reduite d'une image, generee a la volee.
+def nom_miniature(nom_blob: str) -> str:
+    """Nom du blob de la miniature d'une image de galerie."""
+    return f"{PREFIXE_MINIATURES}/{nom_blob}.jpg"
 
-    Le bucket ne contient pas de miniatures : on telecharge donc l'original, on
-    le reduit, et seule la vignette est gardee en cache (pas l'original).
-    """
-    brut = _lire_image(nom_blob)
+def reduire_image(brut: bytes, largeur: int = 480) -> bytes:
+    """ reduit une image a 'largeur' pixels de large, en JPEG (vignettes et miniatures pregenerees)."""
     image = Image.open(io.BytesIO(brut))
     image = image.convert("RGB")
     ratio = largeur / image.width
@@ -579,6 +585,21 @@ def vignette(nom_blob: str, largeur: int = 480) -> bytes:
     tampon = io.BytesIO()
     image.save(tampon, format="JPEG", quality=82, optimize=True)
     return tampon.getvalue()
+
+@st.cache_data(ttl=1800, max_entries=1000, show_spinner=False)
+def vignette(nom_blob: str, largeur: int = 480) -> bytes:
+    """Version reduite d'une image.
+
+    Lit la miniature pregeneree (generer_miniatures.py) quand elle existe : environ 33 Ko au lieu d'un original de
+    d'environ1,65 Mo a reduire. A defaut (journee locale, image arrivee apres la generation, autre largeur), reduit
+    l'original a la volee comme avant. Seule la vignette est gardee en cache (pas l'original).
+    """
+    if largeur == 480 and not nom_blob.startswith(PREFIXE_LOCAL):
+        try:
+            return client_storage().bucket(BUCKET).blob(nom_miniature(nom_blob)).download_as_bytes()
+        except NotFound:
+            pass
+    return reduire_image(_lire_image(nom_blob), largeur)
 
 
 def vider_caches() -> None:
