@@ -35,7 +35,7 @@ import config as cfg
 # config.py deja importe : l'application cherchait alors une constante absente de
 # l'ancienne version (22/10). On recharge config.py s'il n'est pas celui attendu
 # (VERSION_CONFIG, a changer en meme temps dans les deux fichiers).
-if getattr(cfg, "VERSION_CONFIG", None) != "2026-10-22.2":
+if getattr(cfg, "VERSION_CONFIG", None) != "2026-10-28.1":
     import importlib
 
     cfg = importlib.reload(cfg)

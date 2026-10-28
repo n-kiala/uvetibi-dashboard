@@ -108,7 +108,7 @@ JOURS_EXCLUS = {date(2026, 9, 25)}
 
 # Version de ce fichier : app_v3.py le recharge si celle qu'il a en memoire est differente. Sur Streamlit Cloud,
 # une mise a jour du depot relance app_v3.py sans recharger config.py deja importe. A changer a chaque modification.
-VERSION_CONFIG = "2026-10-22.2"
+VERSION_CONFIG = "2026-10-28.1"
 
 # Variantes de saisie (casse, orthographe) ramenees vers un type canonique
 # ci-dessus, pour que chaque erreur ne soit comptee et coloree qu'une fois.
