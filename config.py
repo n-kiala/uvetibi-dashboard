@@ -450,7 +450,9 @@ def _inventaire_galerie() -> dict[tuple[str, str], bool]:
     """
     prefixe = f"{GALERIE_PREFIX}/"
     inventaire: dict[tuple[str, str], bool] = {}
-    for blob in client_storage().bucket(BUCKET).list_blobs(prefix=prefixe):
+    # Seul le nom sert ici : on ne demande que lui (et le jeton de page suivante), au lieu de toutes les
+    # metadonnees de chaque objet (taille, dates, empreintes...), pour alleger les reponses du listage (M4).
+    for blob in client_storage().bucket(BUCKET).list_blobs(prefix=prefixe, fields="items(name),nextPageToken"):
         segments = blob.name[len(prefixe):].split("/")
         if len(segments) >= 3 and segments[2].lower().endswith(EXTENSIONS_IMAGE):
             cle = (segments[0], segments[1])
