@@ -487,6 +487,114 @@ for index, plaque in enumerate(plaques_jour):
             st.session_state.zoom = None
             st.rerun()
 
+@st.fragment
+def afficher_galerie(images: list[str], plaque_active: str, df_jour: pd.DataFrame) -> None:
+    """Image agrandie (fleches, fermeture) ou grille de vignettes du vehicule choisi.
+    Fragment (M4) : un clic de navigation ne reexecute que cette fonction, et non toute la page
+    (graphique, indicateurs, listes, exports). La suppression d'une image modifie les donnees : elle
+    relance toute l'application (st.rerun() sans scope).
+    """
+    st.session_state.setdefault("zoom", None)
+    
+    if st.session_state.zoom is not None:
+        index = st.session_state.zoom % len(images)
+        # Fleches de part et d'autre de l'image, et non plus dessous : il
+        # fallait faire defiler la page a chaque photo pour les atteindre
+        # (retour client). Les touches gauche / droite et Echap font de meme.
+        col_info, col_fermer = st.columns([8, 1], vertical_alignment="center")
+        col_info.markdown(f"**Figure {index + 1} sur {len(images)}**")
+        if col_fermer.button("Fermer", key="fermer", shortcut="Esc", use_container_width=True):
+            st.session_state.zoom = None
+            st.rerun(scope="fragment")
+        col_prec, col_image, col_suiv = st.columns([1, 14, 1], vertical_alignment="center")
+        with col_image:
+            st.image(cfg.telecharger_image(images[index]), use_container_width=True)
+        if col_prec.button("←", key="prec", shortcut="Left", use_container_width=True):
+            st.session_state.zoom = (index - 1) % len(images)
+            st.rerun(scope="fragment")
+        if col_suiv.button("→", key="suiv", shortcut="Right", use_container_width=True):
+            st.session_state.zoom = (index + 1) % len(images)
+            st.rerun(scope="fragment")
+
+        if AUTORISER_SUPPRESSION:
+            constats_vehicule = df_jour[df_jour["plaque"] == plaque_active][
+                ["horodatage", "type", "count", "score_confiance"]
+            ].sort_values("horodatage")
+            st.divider()
+            if constats_vehicule.empty:
+                st.info("Aucun constat associé à ce véhicule pour ce jour.")
+            else:
+                st.caption(
+                    "Supprime définitivement ce fichier image du stockage ainsi que le constat "
+                    "choisi ci-dessous dans BigQuery. Un constat inséré il y a moins de 30 minutes "
+                    "peut encore être dans le tampon de streaming et refuser d'être supprimé."
+                )
+                options_suppression = {
+                    f"{ligne.horodatage} · {ligne.type} · count {ligne.count}": ligne
+                    for ligne in constats_vehicule.itertuples()
+                }
+                choix_suppression = st.selectbox(
+                    "Constat correspondant à cette image", list(options_suppression.keys()),
+                    key="choix_suppression",
+                )
+                confirme_suppression = st.checkbox(
+                    "Je confirme la suppression définitive de cette image et de ce constat",
+                    key="confirme_suppression",
+                )
+                if st.button(
+                    "Supprimer cette image et le constat",
+                    type="primary",
+                    disabled=not confirme_suppression,
+                    key="bouton_suppression",
+                ):
+                    ligne = options_suppression[choix_suppression]
+                    nom_image = images[index]
+                    try:
+                        cfg.supprimer_image(nom_image)
+                    except Exception as exc:  # noqa: BLE001
+                        st.error("La suppression du fichier image a échoué.")
+                        st.exception(exc)
+                        st.stop()
+
+                    requete = f"""
+                        DELETE FROM `{cfg.TABLE_REF}`
+                        WHERE horodatage = @horodatage
+                        AND plaque = @plaque
+                        AND type = @type
+                    """
+                    parametres = bigquery.QueryJobConfig(
+                        query_parameters=[
+                            bigquery.ScalarQueryParameter(
+                                "horodatage", "TIMESTAMP", ligne.horodatage.to_pydatetime()
+                            ),
+                            bigquery.ScalarQueryParameter("plaque", "STRING", str(plaque_active)),
+                            bigquery.ScalarQueryParameter("type", "STRING", str(ligne.type)),
+                        ]
+                    )
+                    try:
+                        travail = cfg.client_bigquery().query(requete, job_config=parametres)
+                        travail.result()
+                    except Exception as exc:  # noqa: BLE001
+                        st.warning(
+                            "L'image a été supprimée, mais la suppression du constat BigQuery a échoué."
+                        )
+                        st.exception(exc)
+                        st.stop()
+
+                    cfg.vider_caches()
+                    st.session_state.zoom = None
+                    st.success("Image et constat supprimés.")
+                    st.rerun()
+    else:
+        for depart in range(0, len(images), 3):
+            for colonne, position in zip(st.columns(3), range(depart, min(depart + 3, len(images)))):
+                with colonne:
+                    st.image(cfg.vignette(images[position]), use_container_width=True)
+                    st.markdown(f"**Figure {position + 1}**")
+                    if st.button("Agrandir", key=f"zoom_{position}", use_container_width=True):
+                        st.session_state.zoom = position
+                        st.rerun(scope="fragment")    
+    
 # --------------------------------------------------------------------------
 # Vehicule choisi : indicateurs et galerie
 # --------------------------------------------------------------------------
@@ -543,107 +651,7 @@ else:
         ),
         unsafe_allow_html=True,
     )
-
-    st.session_state.setdefault("zoom", None)
-
-    if st.session_state.zoom is not None:
-        index = st.session_state.zoom % len(images)
-        # Fleches de part et d'autre de l'image, et non plus dessous : il
-        # fallait faire defiler la page a chaque photo pour les atteindre
-        # (retour client). Les touches gauche / droite et Echap font de meme.
-        col_info, col_fermer = st.columns([8, 1], vertical_alignment="center")
-        col_info.markdown(f"**Figure {index + 1} sur {len(images)}**")
-        if col_fermer.button("Fermer", key="fermer", shortcut="Esc", use_container_width=True):
-            st.session_state.zoom = None
-            st.rerun()
-        col_prec, col_image, col_suiv = st.columns([1, 14, 1], vertical_alignment="center")
-        with col_image:
-            st.image(cfg.telecharger_image(images[index]), use_container_width=True)
-        if col_prec.button("←", key="prec", shortcut="Left", use_container_width=True):
-            st.session_state.zoom = (index - 1) % len(images)
-            st.rerun()
-        if col_suiv.button("→", key="suiv", shortcut="Right", use_container_width=True):
-            st.session_state.zoom = (index + 1) % len(images)
-            st.rerun()
-
-        if AUTORISER_SUPPRESSION:
-            constats_vehicule = df_jour[df_jour["plaque"] == plaque_active][
-                ["horodatage", "type", "count", "score_confiance"]
-            ].sort_values("horodatage")
-            st.divider()
-            if constats_vehicule.empty:
-                st.info("Aucun constat associé à ce véhicule pour ce jour.")
-            else:
-                st.caption(
-                    "Supprime définitivement ce fichier image du stockage ainsi que le constat "
-                    "choisi ci-dessous dans BigQuery. Un constat inséré il y a moins de 30 minutes "
-                    "peut encore être dans le tampon de streaming et refuser d'être supprimé."
-                )
-                options_suppression = {
-                    f"{ligne.horodatage} · {ligne.type} · count {ligne.count}": ligne
-                    for ligne in constats_vehicule.itertuples()
-                }
-                choix_suppression = st.selectbox(
-                    "Constat correspondant à cette image", list(options_suppression.keys()),
-                    key="choix_suppression",
-                )
-                confirme_suppression = st.checkbox(
-                    "Je confirme la suppression définitive de cette image et de ce constat",
-                    key="confirme_suppression",
-                )
-                if st.button(
-                    "Supprimer cette image et le constat",
-                    type="primary",
-                    disabled=not confirme_suppression,
-                    key="bouton_suppression",
-                ):
-                    ligne = options_suppression[choix_suppression]
-                    nom_image = images[index]
-                    try:
-                        cfg.supprimer_image(nom_image)
-                    except Exception as exc:  # noqa: BLE001
-                        st.error("La suppression du fichier image a échoué.")
-                        st.exception(exc)
-                        st.stop()
-
-                    requete = f"""
-                        DELETE FROM `{cfg.TABLE_REF}`
-                        WHERE horodatage = @horodatage
-                          AND plaque = @plaque
-                          AND type = @type
-                    """
-                    parametres = bigquery.QueryJobConfig(
-                        query_parameters=[
-                            bigquery.ScalarQueryParameter(
-                                "horodatage", "TIMESTAMP", ligne.horodatage.to_pydatetime()
-                            ),
-                            bigquery.ScalarQueryParameter("plaque", "STRING", str(plaque_active)),
-                            bigquery.ScalarQueryParameter("type", "STRING", str(ligne.type)),
-                        ]
-                    )
-                    try:
-                        travail = cfg.client_bigquery().query(requete, job_config=parametres)
-                        travail.result()
-                    except Exception as exc:  # noqa: BLE001
-                        st.warning(
-                            "L'image a été supprimée, mais la suppression du constat BigQuery a échoué."
-                        )
-                        st.exception(exc)
-                        st.stop()
-
-                    cfg.vider_caches()
-                    st.session_state.zoom = None
-                    st.success("Image et constat supprimés.")
-                    st.rerun()
-    else:
-        for depart in range(0, len(images), 3):
-            for colonne, position in zip(st.columns(3), range(depart, min(depart + 3, len(images)))):
-                with colonne:
-                    st.image(cfg.vignette(images[position]), use_container_width=True)
-                    st.markdown(f"**Figure {position + 1}**")
-                    if st.button("Agrandir", key=f"zoom_{position}", use_container_width=True):
-                        st.session_state.zoom = position
-                        st.rerun()
+    afficher_galerie(images, plaque_active, df_jour)
 
 # --------------------------------------------------------------------------
 # Export PDF
