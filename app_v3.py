@@ -752,12 +752,18 @@ if images:
     st.write("")
     if st.button("Préparer le rapport PDF de ce véhicule", type="secondary"):
         with st.spinner("Assemblage du rapport..."):
-            st.session_state.pdf = construire_pdf(jour_actif, plaque_active, images)
+            # Le PDF est range avec le jour et le vehicule pour lesquels il a ete construit : apres un changement de
+            # vehicule ou de jour, l'ancien PDF ne doit plus etre propose sous le nom du nouveau (bug releve en M1).
+            st.session_state.pdf = {
+                "cle": (jour_actif, plaque_active),
+                "octets": construire_pdf(jour_actif, plaque_active, images),
+            }
 
-    if st.session_state.get("pdf"):
+    pdf = st.session_state.get("pdf")
+    if pdf and pdf["cle"] == (jour_actif, plaque_active):
         st.download_button(
             "Télécharger le rapport PDF",
-            data=st.session_state.pdf,
+            data=pdf["octets"],
             file_name=f"Rapport_NeuroGreen_{plaque_active}_{jour_actif.isoformat()}.pdf",
             mime="application/pdf",
             type="primary",
