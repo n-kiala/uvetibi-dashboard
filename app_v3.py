@@ -15,6 +15,8 @@ from io import BytesIO
 import altair as alt
 import pandas as pd
 import streamlit as st
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+import threading
 from google.cloud import bigquery
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -132,12 +134,26 @@ def bloc_legende(titre: str, entrees) -> str:
 # Donnees
 # --------------------------------------------------------------------------
 
+# Le listage de la galerie (Cloud Storage) ne depend pas des constats (BigQuery) : il est lance dans un thread
+# pendant la lecture BigQuery, puis attendu la ou il sert (M4). Le contexte Streamlit est attache au thread, qui
+# est toujours attendu (join) avant la fin du script, comme l'exige la documentation de Streamlit.
+_listage = {}
+
+def _lister_couples() -> None:
+    try:
+        _listage["couples"] = cfg.couples_avec_photo_plaque()
+    except Exception as exc:  # noqa: BLE001 - l'erreur est relancee dans le script principal
+        _listage["erreur"] = exc
+_fil_listage = threading.Thread(target=_lister_couples)
+add_script_run_ctx(_fil_listage, get_script_run_ctx())
+_fil_listage.start()
+
 try:
     df = cfg.charger_constats()
     erreur_chargement = None
 except Exception as exc:  # noqa: BLE001
     df, erreur_chargement = None, exc
-
+_fil_listage.join()  # avant un eventuel st.stop() : le thread ne doit pas survivre au script
 if erreur_chargement is not None:
     st.error("La connexion à BigQuery a échoué. Le détail technique :")
     st.exception(erreur_chargement)
@@ -174,7 +190,9 @@ df = df[df["plaque"].map(cfg.plaque_identifiee)]
 # Meme regle pour un vehicule sans photo de sa plaque (plaque illisible dans
 # toutes ses videos) : le client ne pourrait pas l'identifier.
 try:
-    couples = cfg.couples_avec_photo_plaque()
+    if "erreur" in _listage:
+        raise _listage["erreur"]
+    couples = _listage["couples"]
     df = df[
         [
             (jour.isoformat(), str(plaque)) in couples
@@ -186,6 +204,7 @@ except Exception as exc:  # noqa: BLE001
         "Impossible de vérifier les images disponibles ; les constats sans "
         "image restent affichés."
     )
+
 
 if df.empty:
     st.info(
