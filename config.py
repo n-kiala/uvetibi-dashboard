@@ -100,7 +100,7 @@ JOURS_EXCLUS = {date(2026, 9, 25)}
 
 # Version de ce fichier : app_v3.py le recharge si celle qu'il a en memoire est differente. Sur Streamlit Cloud,
 # une mise a jour du depot relance app_v3.py sans recharger config.py deja importe. A changer a chaque modification.
-VERSION_CONFIG = "2026-10-22.2"
+VERSION_CONFIG = "2026-11-16.3"
 
 # Variantes de saisie (casse, orthographe) ramenees vers un type canonique
 # ci-dessus, pour que chaque erreur ne soit comptee et coloree qu'une fois.
@@ -435,6 +435,49 @@ def dossiers_images(jour_iso: str, plaque: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# Numerotation des dechets sur les images (16/11/2026)
+# --------------------------------------------------------------------------
+
+# cvat-export\\numeroter_galerie.py produit, pour une journee, une copie de chaque image de galerie ou chaque dechet
+# apporte par le camion porte un numero (meme dechet = meme numero d'une image a l'autre ; « F » = deja dans la
+# fosse) ; publier_numerotation.py les envoie dans ce dossier du bucket, a cote de la galerie, qui reste intacte.
+# Le dashboard sert la copie numerotee quand elle existe.
+GALERIE_NUMEROTEE_PREFIX = "tibilevel_test_isapi/Galerie_erreur_numerotee"
+
+TEXTE_NUMEROTATION = (
+    "Chaque indésirable apporté par le véhicule porte un numéro, de 1 au total du véhicule ce jour-là. Un même déchet "
+    "visible sur plusieurs images garde son numéro : sur fond de couleur, l'image où il est compté ; sur fond noir, "
+    "le même déchet revu ensuite, qui n'est pas compté une seconde fois. Un cadre marqué « F » entoure un déchet qui "
+    "était déjà dans la fosse avant le déchargement : il n'est pas compté pour ce véhicule."
+)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _images_numerotees() -> set[str]:
+    """Chemins « jour/plaque/image » (sans extension) des copies numerotees presentes dans le bucket."""
+    prefixe = f"{GALERIE_NUMEROTEE_PREFIX}/"
+    return {
+        os.path.splitext(blob.name[len(prefixe):])[0]
+        for blob in client_storage().bucket(BUCKET).list_blobs(prefix=prefixe)
+        if blob.name.lower().endswith(".jpg")
+    }
+
+
+def _image_numerotee(nom_blob: str) -> str | None:
+    """Blob de la copie numerotee d'une image de la galerie publiee, s'il existe."""
+    prefixe = f"{GALERIE_PREFIX}/"
+    if not nom_blob.startswith(prefixe):
+        return None
+    relatif = os.path.splitext(nom_blob[len(prefixe):])[0]
+    return f"{GALERIE_NUMEROTEE_PREFIX}/{relatif}.jpg" if relatif in _images_numerotees() else None
+
+
+def numerotation(jour: date, plaque: str) -> bool:
+    """Les images de ce vehicule ce jour-la sont-elles numerotees ?"""
+    debut = f"{jour.isoformat()}/{plaque}/"
+    return any(chemin.startswith(debut) for chemin in _images_numerotees())
+
+# --------------------------------------------------------------------------
 # Inventaire de la galerie
 # --------------------------------------------------------------------------
 
@@ -537,7 +580,9 @@ def cle_galerie(nom: str):
 
 
 def _lire_image(nom_blob: str) -> bytes:
-    """Image pleine resolution, en octets (Cloud Storage, ou disque pour une journee locale), sans cache."""
+    """Image pleine resolution, en octets (Cloud Storage, ou disque pour une journee locale), sans cache. La copie
+    numerotee d'une image de galerie, quand elle existe, remplace l'image."""
+    nom_blob = _image_numerotee(nom_blob) or nom_blob
     if nom_blob.startswith(PREFIXE_LOCAL):
         with open(nom_blob[len(PREFIXE_LOCAL):], "rb") as fichier:
             return fichier.read()
@@ -587,3 +632,4 @@ def vider_caches() -> None:
     charger_constats_locaux.clear()
     _lister_dossier.clear()
     _inventaire_galerie.clear()
+    _images_numerotees.clear()

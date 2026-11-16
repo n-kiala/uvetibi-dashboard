@@ -35,7 +35,7 @@ import config as cfg
 # config.py deja importe : l'application cherchait alors une constante absente de
 # l'ancienne version (22/10). On recharge config.py s'il n'est pas celui attendu
 # (VERSION_CONFIG, a changer en meme temps dans les deux fichiers).
-if getattr(cfg, "VERSION_CONFIG", None) != "2026-10-22.2":
+if getattr(cfg, "VERSION_CONFIG", None) != "2026-11-16.3":
     import importlib
 
     cfg = importlib.reload(cfg)
@@ -544,6 +544,14 @@ else:
         unsafe_allow_html=True,
     )
 
+    # Numeros sur les images (16/11) : question client « le meme dechet est-il compte plusieurs fois ? ».
+    if cfg.numerotation(jour_actif, plaque_active):
+        st.markdown(
+            '<div class="bloc-legende"><div class="bloc-legende-titre">Numérotation des indésirables</div>'
+            f'<span class="annotation-glose">{cfg.TEXTE_NUMEROTATION}</span></div>',
+            unsafe_allow_html=True,
+        )
+
     st.session_state.setdefault("zoom", None)
 
     if st.session_state.zoom is not None:
@@ -717,6 +725,13 @@ def construire_pdf(jour, plaque, noms_blobs) -> bytes:
         tableau_legende,
         Spacer(1, 15),
     ]
+    if cfg.numerotation(jour, plaque):                  # images numerotees
+        contenu.extend([
+            Paragraph("<b>Numérotation des indésirables</b>", style_legende),
+            Spacer(1, 2),
+            Paragraph(cfg.TEXTE_NUMEROTATION, style_legende),
+            Spacer(1, 15),
+        ])
 
     for numero, nom_blob in enumerate(noms_blobs, start=1):
         image = RLImage(BytesIO(cfg.telecharger_image(nom_blob)), width=480, height=270)
