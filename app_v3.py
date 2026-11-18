@@ -35,7 +35,7 @@ import config as cfg
 # config.py deja importe : l'application cherchait alors une constante absente de
 # l'ancienne version (22/10). On recharge config.py s'il n'est pas celui attendu
 # (VERSION_CONFIG, a changer en meme temps dans les deux fichiers).
-if getattr(cfg, "VERSION_CONFIG", None) != "2026-11-16.3":
+if getattr(cfg, "VERSION_CONFIG", None) != "2026-11-18.1":
     import importlib
 
     cfg = importlib.reload(cfg)
@@ -261,6 +261,73 @@ if df.empty:
     st.stop()
 
 # --------------------------------------------------------------------------
+# Indicateurs de la periode choisie
+# --------------------------------------------------------------------------
+
+
+def cartes_indicateurs(indicateurs) -> None:
+    """Rangee de cartes ; `indicateurs` : suite de (libelle, valeur, accent, precision).
+
+    La precision, facultative, s'affiche en petit sous la valeur. Une seule
+    grille HTML plutot que des st.columns : toutes les cartes de la rangee
+    prennent la hauteur de la plus haute, avec ou sans precision.
+    """
+    cartes = "".join(
+        f'<div class="carte {"carte-active" if accent else ""}">'
+        f'<div class="carte-label">{label}</div>'
+        f'<p class="{"carte-valeur" if valeur[:1].isdigit() else "carte-valeur-texte"}">{valeur}</p>'
+        + (f'<div class="carte-precision">{precision}</div>' if precision else "")
+        + "</div>"
+        for label, valeur, accent, precision in indicateurs
+    )
+    st.write("")
+    st.markdown(f'<div class="rangee-cartes">{cartes}</div>', unsafe_allow_html=True)
+
+
+def nombre_fr(valeur: float) -> str:
+    """Un chiffre apres la virgule, a la francaise (6,5)."""
+    return f"{valeur:.1f}".replace(".", ",")
+
+
+def indicateurs_periode(constats: pd.DataFrame) -> list[tuple[str, str, bool, str]]:
+    """Trois indicateurs de suivi sur la periode choisie, tous vehicules confondus (passage = un vehicule un
+    jour donne) : part des passages avec au moins un indesirable, indesirables par passage concerne, sacs non
+    bio par jour de collecte."""
+    concernes = len(constats.drop_duplicates(["date", "plaque"]))
+    jours_collecte = constats["date"].nunique()
+    sans = cfg.charger_passages_sans_indesirable()
+    sans_periode = sum(n for jour, n in sans.items() if debut_choisi <= jour <= fin_choisi)
+    analyses = concernes + sans_periode
+    sacs = int(constats.loc[constats["type"] == "Sac_non_bio", "count"].sum())
+    return [
+        (
+            "Passages avec au moins un indésirable",
+            f"{round(100 * concernes / analyses)} %" if sans else "n. d.",
+            True,
+            f"{concernes} passages sur {analyses} analysés" if sans else "passages sans indésirable non renseignés",
+        ),
+        (
+            "Indésirables par passage concerné",
+            nombre_fr(constats["count"].sum() / concernes),
+            False,
+            f"{int(constats['count'].sum())} indésirables, {concernes} passages concernés",
+        ),
+        (
+            "Sacs non bio par jour de collecte",
+            nombre_fr(sacs / jours_collecte),
+            False,
+            f"{sacs} sacs non bio, {jours_collecte} jour{'s' if jours_collecte > 1 else ''} de collecte",
+        ),
+    ]
+
+
+st.markdown(
+    f"##### Indicateurs de la période &mdash; du {debut_choisi:%d/%m/%Y} au {fin_choisi:%d/%m/%Y}, tous les véhicules"
+)
+cartes_indicateurs(indicateurs_periode(df))
+st.caption("Passage : un véhicule un jour donné. Ces indicateurs suivent la période choisie ci-dessus.")
+
+# --------------------------------------------------------------------------
 # Selection du jour
 # --------------------------------------------------------------------------
 
@@ -377,25 +444,6 @@ df_jour = df[df["date"] == jour_actif]
 if st.session_state.get("plaque") not in set(df_jour["plaque"]):
     st.session_state.plaque = None
 plaque_active = st.session_state.plaque
-
-
-def cartes_indicateurs(indicateurs) -> None:
-    """Rangee de cartes ; `indicateurs` : suite de (libelle, valeur, accent, precision).
-
-    La precision, facultative, s'affiche en petit sous la valeur. Une seule
-    grille HTML plutot que des st.columns : toutes les cartes de la rangee
-    prennent la hauteur de la plus haute, avec ou sans precision.
-    """
-    cartes = "".join(
-        f'<div class="carte {"carte-active" if accent else ""}">'
-        f'<div class="carte-label">{label}</div>'
-        f'<p class="{"carte-valeur" if valeur.isdigit() else "carte-valeur-texte"}">{valeur}</p>'
-        + (f'<div class="carte-precision">{precision}</div>' if precision else "")
-        + "</div>"
-        for label, valeur, accent, precision in indicateurs
-    )
-    st.write("")
-    st.markdown(f'<div class="rangee-cartes">{cartes}</div>', unsafe_allow_html=True)
 
 
 def panneau_types(intitule: str, constats: pd.DataFrame) -> None:

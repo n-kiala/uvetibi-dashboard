@@ -100,7 +100,7 @@ JOURS_EXCLUS = {date(2026, 9, 25)}
 
 # Version de ce fichier : app_v3.py le recharge si celle qu'il a en memoire est differente. Sur Streamlit Cloud,
 # une mise a jour du depot relance app_v3.py sans recharger config.py deja importe. A changer a chaque modification.
-VERSION_CONFIG = "2026-11-16.3"
+VERSION_CONFIG = "2026-11-18.1"
 
 # Variantes de saisie (casse, orthographe) ramenees vers un type canonique
 # ci-dessus, pour que chaque erreur ne soit comptee et coloree qu'une fois.
@@ -433,6 +433,31 @@ def dossiers_images(jour_iso: str, plaque: str) -> list[str]:
         if jour == jour_iso and e["plaque_corrigee"] == plaque and saisie != plaque
     ]
 
+
+# --------------------------------------------------------------------------
+# Passages sans indesirable
+# --------------------------------------------------------------------------
+
+# BigQuery ne contient que les passages avec au moins un indesirable (passage = un vehicule un jour donne). Ce
+# fichier donne, par jour, le nombre de passages analyses SANS indesirable (aucune plaque : publiable). Il sert
+# au taux « passages avec au moins un indesirable » des indicateurs de la periode. Produit a partir de la
+# validation des camions sans indesirable (cvat-export\valider_camions_sans_indesirable.py) ; a completer
+# pour chaque nouvelle journee.
+PASSAGES_SANS_INDESIRABLE = os.path.join(BASE_DIR, "passages_sans_indesirable.csv")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def charger_passages_sans_indesirable() -> dict[date, int]:
+    """{jour : passages analyses sans indesirable} ; vide si le fichier manque."""
+    if not os.path.exists(PASSAGES_SANS_INDESIRABLE):
+        return {}
+    tableau = pd.read_csv(PASSAGES_SANS_INDESIRABLE, sep=";")
+    jours = pd.to_datetime(tableau["date"]).dt.date
+    return {
+        jour: int(nombre)
+        for jour, nombre in zip(jours, tableau["passages_sans_indesirable"])
+        if jour not in JOURS_EXCLUS
+    }
 
 # --------------------------------------------------------------------------
 # Numerotation des dechets sur les images (16/11/2026)
