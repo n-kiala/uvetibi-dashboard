@@ -55,6 +55,28 @@ st.set_page_config(
 )
 
 # --------------------------------------------------------------------------
+# Code d'acces demande a l'arrivee (une fois par session de navigateur)
+# --------------------------------------------------------------------------
+
+try:
+    CODE_ACCES = str(st.secrets.get("code_acces", "1995"))
+except Exception:  # pas de secrets.toml en local
+    CODE_ACCES = "1995"
+
+if not st.session_state.get("acces_ok", False):
+    st.markdown("### Suivi des indésirables — UVE Tibi")
+    with st.form("form_code_acces"):
+        saisie_code = st.text_input("Code d'accès", type="password")
+        valide = st.form_submit_button("Entrer", type="primary")
+    if valide:
+        if saisie_code.strip() == CODE_ACCES:
+            st.session_state.acces_ok = True
+            st.rerun()
+        else:
+            st.error("Code incorrect.")
+    st.stop()
+
+# --------------------------------------------------------------------------
 # Styles
 # --------------------------------------------------------------------------
 
